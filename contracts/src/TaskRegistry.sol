@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import {Ownable} from "./Ownable.sol";
+import {IClientAppRegistry} from "./interfaces/IClientAppRegistry.sol";
 
 contract TaskRegistry is Ownable {
     /*//////////////////////////////////////////////////////////////
@@ -17,7 +18,7 @@ contract TaskRegistry is Ownable {
 
     error TaskAlreadyExists();
     error InvalidTaskOperation();
-
+    error InvalidAppId();
     /*//////////////////////////////////////////////////////////////
                               STATE
     //////////////////////////////////////////////////////////////*/
@@ -64,6 +65,9 @@ contract TaskRegistry is Ownable {
     //////////////////////////////////////////////////////////////*/
 
     function createTask(bytes32 appId) external {
+        // Check that appId is registered
+        if (!IClientAppRegistry(clientAppRegistry).isClientApp(appId)) revert InvalidAppId();
+
         // We create a pseudo unique taskId in order to keep track of the task while minimizing gas cost
         bytes32 taskId = keccak256(abi.encode(msg.sender, appId, block.timestamp));
 
@@ -76,12 +80,10 @@ contract TaskRegistry is Ownable {
 
     function respondToTask(bytes32 taskId, TaskStatus status) external onlyAggregatorNode {
         // Check that status is only Completed or Failed
-        if (status == TaskStatus.EMPTY) revert InvalidTaskOperation();
-        if (status == TaskStatus.PENDING) revert InvalidTaskOperation();
+        if (status == TaskStatus.EMPTY || status == TaskStatus.PENDING) revert InvalidTaskOperation();
 
-        // Check that taskId have not been responded to already
-        if (tasks[taskId] == TaskStatus.COMPLETED) revert InvalidTaskOperation();
-        if (tasks[taskId] == TaskStatus.FAILED) revert InvalidTaskOperation();
+        // Check that taskId have not been responded yet
+        if (tasks[taskId] != TaskStatus.PENDING) revert InvalidTaskOperation();
 
         tasks[taskId] = status;
         emit TaskResponded(taskId, status);
