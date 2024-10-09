@@ -23,7 +23,7 @@ contract TaskRegistry is Ownable {
     //////////////////////////////////////////////////////////////*/
 
     struct TaskRequest {
-        bytes32 agentId;
+        bytes32 appId;
     }
 
     enum TaskStatus {
@@ -63,14 +63,14 @@ contract TaskRegistry is Ownable {
                               ENTRYPOINTS
     //////////////////////////////////////////////////////////////*/
 
-    function createTask(bytes32 agentId) external {
+    function createTask(bytes32 appId) external {
         // We create a pseudo unique taskId in order to keep track of the task while minimizing gas cost
-        bytes32 taskId = keccak256(abi.encode(msg.sender, agentId, block.timestamp));
+        bytes32 taskId = keccak256(abi.encode(msg.sender, appId, block.timestamp));
 
         // Verify taskId is not already in use
         if (tasks[taskId] != TaskStatus.EMPTY) revert TaskAlreadyExists();
         tasks[taskId] = TaskStatus.PENDING;
-        TaskRequest memory taskRequest = TaskRequest(agentId);
+        TaskRequest memory taskRequest = TaskRequest(appId);
         emit TaskRequested(taskId, taskRequest);
     }
 

@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.26;
 
-import {Test, console2} from "forge-std/Test.sol";
 import {TaskRegistry} from "../src/TaskRegistry.sol";
-import {Ownable} from "src/Ownable.sol";
+import {Ownable} from "../src/Ownable.sol";
 import {TestState} from "./TestState.sol";
 
 contract TaskRegistryTest is TestState {
@@ -46,33 +45,33 @@ contract TaskRegistryTest is TestState {
     }
 
     function testCreateTask() public {
-        bytes32 agentId = bytes32(uint256(1));
-        bytes32 taskId = keccak256(abi.encode(user, agentId, block.timestamp));
+        bytes32 appId = bytes32(uint256(1));
+        bytes32 taskId = keccak256(abi.encode(user, appId, block.timestamp));
         assertEq(uint256(taskRegistry.tasks(taskId)), uint256(TaskRegistry.TaskStatus.EMPTY));
 
         vm.prank(user);
-        taskRegistry.createTask(agentId);
+        taskRegistry.createTask(appId);
         assertEq(uint256(taskRegistry.tasks(taskId)), uint256(TaskRegistry.TaskStatus.PENDING));
     }
 
     function testCreateTask_RevertWhen_TaskAlreadyExists() public {
-        bytes32 agentId = bytes32(uint256(1));
+        bytes32 appId = bytes32(uint256(1));
 
         vm.startPrank(user);
-        taskRegistry.createTask(agentId);
+        taskRegistry.createTask(appId);
 
         vm.expectRevert(TaskRegistry.TaskAlreadyExists.selector);
-        taskRegistry.createTask(agentId);
+        taskRegistry.createTask(appId);
         vm.stopPrank();
     }
 
     function testRespondToTask() public {
-        bytes32 agentId = bytes32(uint256(1));
+        bytes32 appId = bytes32(uint256(1));
 
         vm.prank(user);
-        taskRegistry.createTask(agentId);
+        taskRegistry.createTask(appId);
 
-        bytes32 taskId = keccak256(abi.encode(user, agentId, block.timestamp));
+        bytes32 taskId = keccak256(abi.encode(user, appId, block.timestamp));
 
         vm.prank(aggregatorNode);
 
@@ -80,12 +79,12 @@ contract TaskRegistryTest is TestState {
     }
 
     function testRespondToTask_RevertWhen_NotAggregatorNode() public {
-        bytes32 agentId = bytes32(uint256(1));
+        bytes32 appId = bytes32(uint256(1));
 
         vm.prank(user);
-        taskRegistry.createTask(agentId);
+        taskRegistry.createTask(appId);
 
-        bytes32 taskId = keccak256(abi.encode(user, agentId, block.timestamp));
+        bytes32 taskId = keccak256(abi.encode(user, appId, block.timestamp));
 
         vm.prank(user);
         vm.expectRevert(Ownable.Unauthorized.selector);
@@ -93,12 +92,12 @@ contract TaskRegistryTest is TestState {
     }
 
     function testRespondToTask_RevertWhen_InvalidStatus() public {
-        bytes32 agentId = bytes32(uint256(1));
+        bytes32 appId = bytes32(uint256(1));
 
         vm.prank(user);
-        taskRegistry.createTask(agentId);
+        taskRegistry.createTask(appId);
 
-        bytes32 taskId = keccak256(abi.encode(user, agentId, block.timestamp));
+        bytes32 taskId = keccak256(abi.encode(user, appId, block.timestamp));
 
         vm.prank(aggregatorNode);
         vm.expectRevert(TaskRegistry.InvalidTaskOperation.selector);
@@ -110,12 +109,12 @@ contract TaskRegistryTest is TestState {
     }
 
     function testRespondToTask_RevertWhen_AlreadyRespondedCompleted() public {
-        bytes32 agentId = bytes32(uint256(1));
+        bytes32 appId = bytes32(uint256(1));
 
         vm.prank(user);
-        taskRegistry.createTask(agentId);
+        taskRegistry.createTask(appId);
 
-        bytes32 taskId = keccak256(abi.encode(user, agentId, block.timestamp));
+        bytes32 taskId = keccak256(abi.encode(user, appId, block.timestamp));
 
         vm.prank(aggregatorNode);
         taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.COMPLETED);
@@ -126,12 +125,12 @@ contract TaskRegistryTest is TestState {
     }
 
     function testRespondToTask_RevertWhen_AlreadyRespondedFailed() public {
-        bytes32 agentId = bytes32(uint256(1));
+        bytes32 appId = bytes32(uint256(1));
 
         vm.prank(user);
-        taskRegistry.createTask(agentId);
+        taskRegistry.createTask(appId);
 
-        bytes32 taskId = keccak256(abi.encode(user, agentId, block.timestamp));
+        bytes32 taskId = keccak256(abi.encode(user, appId, block.timestamp));
 
         vm.prank(aggregatorNode);
         taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.FAILED);
