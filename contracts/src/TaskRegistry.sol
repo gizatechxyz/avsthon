@@ -83,6 +83,7 @@ contract TaskRegistry is Ownable {
         if (tasks[taskId] == TaskStatus.COMPLETED) revert InvalidTaskOperation();
         if (tasks[taskId] == TaskStatus.FAILED) revert InvalidTaskOperation();
 
+        tasks[taskId] = status;
         emit TaskResponded(taskId, status);
     }
 
