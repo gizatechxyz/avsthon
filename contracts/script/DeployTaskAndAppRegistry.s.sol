@@ -25,7 +25,8 @@ contract DeployTaskAndAppRegistry is Script, Constants {
             ClientAppMetadata({
                 name: "Ethereum Block Number",
                 description: "This task returns the current block number of the Ethereum network.",
-                logoUrl: ""
+                logoUrl: "",
+                dockerUrl: ""
             })
         );
 

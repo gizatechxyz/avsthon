@@ -15,6 +15,7 @@ contract ClientAppRegistryTest is TestState {
         ClientAppMetadata memory metadata = ClientAppMetadata({
             name: "Test App",
             description: "A test client application",
+            dockerUrl: "https://example.com/docker.png",
             logoUrl: "https://example.com/logo.png"
         });
 
@@ -27,6 +28,7 @@ contract ClientAppRegistryTest is TestState {
         assertEq(storedMetadata.name, metadata.name);
         assertEq(storedMetadata.description, metadata.description);
         assertEq(storedMetadata.logoUrl, metadata.logoUrl);
+        assertEq(storedMetadata.dockerUrl, metadata.dockerUrl);
     }
 
     function testRegisterClientApp_RevertWhen_NotOwner() public {
@@ -34,6 +36,7 @@ contract ClientAppRegistryTest is TestState {
         ClientAppMetadata memory metadata = ClientAppMetadata({
             name: "Test App",
             description: "A test client application",
+            dockerUrl: "https://example.com/docker.png",
             logoUrl: "https://example.com/logo.png"
         });
 
@@ -47,6 +50,7 @@ contract ClientAppRegistryTest is TestState {
         ClientAppMetadata memory metadata = ClientAppMetadata({
             name: "Test App",
             description: "A test client application",
+            dockerUrl: "https://example.com/docker.png",
             logoUrl: "https://example.com/logo.png"
         });
 
@@ -63,6 +67,7 @@ contract ClientAppRegistryTest is TestState {
         ClientAppMetadata memory metadata = ClientAppMetadata({
             name: "Test App",
             description: "A test client application",
+            dockerUrl: "https://example.com/docker.png",
             logoUrl: "https://example.com/logo.png"
         });
 
@@ -73,6 +78,7 @@ contract ClientAppRegistryTest is TestState {
         assertEq(retrievedMetadata.name, metadata.name);
         assertEq(retrievedMetadata.description, metadata.description);
         assertEq(retrievedMetadata.logoUrl, metadata.logoUrl);
+        assertEq(retrievedMetadata.dockerUrl, metadata.dockerUrl);
     }
 
     function testIsClientApp() public {
@@ -80,6 +86,7 @@ contract ClientAppRegistryTest is TestState {
         ClientAppMetadata memory metadata = ClientAppMetadata({
             name: "Test App",
             description: "A test client application",
+            dockerUrl: "https://example.com/docker.png",
             logoUrl: "https://example.com/logo.png"
         });
 

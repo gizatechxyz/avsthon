@@ -13,7 +13,7 @@ contract TaskRegistryTest is TestState {
         // Register client app
         bytes32 appId = bytes32(uint256(1));
         vm.prank(owner);
-        clientAppRegistry.registerClientApp(appId, ClientAppMetadata("Test APP", "Test App", "TEST"));
+        clientAppRegistry.registerClientApp(appId, ClientAppMetadata("Test APP", "Test App", "TEST", ""));
     }
 
     function testSetAggregatorNode() public {

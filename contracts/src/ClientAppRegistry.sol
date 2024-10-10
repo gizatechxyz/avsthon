@@ -6,6 +6,7 @@ import {Ownable} from "./Ownable.sol";
 struct ClientAppMetadata {
     string name;
     string description;
+    string dockerUrl;
     string logoUrl;
 }
 
