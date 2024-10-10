@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import {Script, console2} from "forge-std/Script.sol";
 import {Constants} from "./Constants.sol";
 import {TaskRegistry} from "../src/TaskRegistry.sol";
-import {ClientAppRegistry} from "../src/ClientAppRegistry.sol";
+import {ClientAppRegistry, ClientAppMetadata} from "../src/ClientAppRegistry.sol";
 
 contract DeployTaskAndAppRegistry is Script, Constants {
     TaskRegistry public taskRegistry;
@@ -18,6 +18,16 @@ contract DeployTaskAndAppRegistry is Script, Constants {
 
         clientAppRegistry = new ClientAppRegistry(msg.sender);
         taskRegistry = new TaskRegistry(msg.sender, AGGREGATOR_NODE, address(clientAppRegistry));
+
+        bytes32 clientAppId = keccak256("ethereum-block-number");
+        clientAppRegistry.registerClientApp(
+            clientAppId,
+            ClientAppMetadata({
+                name: "Ethereum Block Number",
+                description: "This task returns the current block number of the Ethereum network.",
+                logoUrl: ""
+            })
+        );
 
         console2.log("ClientAppRegistry deployed at %s", address(clientAppRegistry));
         console2.log("TaskRegistry deployed at %s", address(taskRegistry));
