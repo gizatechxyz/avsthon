@@ -20,6 +20,7 @@ contract DeployTaskAndAppRegistry is Script, Constants {
         taskRegistry = new TaskRegistry(msg.sender, AGGREGATOR_NODE, address(clientAppRegistry));
 
         bytes32 clientAppId = keccak256("ethereum-block-number");
+        console2.logBytes32(clientAppId);
         clientAppRegistry.registerClientApp(
             clientAppId,
             ClientAppMetadata({
