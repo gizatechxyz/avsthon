@@ -14,11 +14,11 @@ use alloy::{
 use alloy_primitives::{Address, FixedBytes, U256};
 use contract_bindings::{
     AVSDirectory::AVSDirectoryInstance,
-    ClientAppRegistry::{ClientAppMetadata, ClientAppRegistryInstance},
     GizaAVS::GizaAVSInstance,
     ISignatureUtils::SignatureWithSaltAndExpiry,
-    TaskRegistry::{self, TaskRegistryInstance},
     AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
+    ClientAppRegistry::{ClientAppMetadata, ClientAppRegistryInstance},
+    TaskRegistry::{self, TaskRegistryInstance},
 };
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
@@ -80,6 +80,7 @@ impl Operator {
         let rpc_url = "http://localhost:8545"
             .parse()
             .expect("Failed to parse URL");
+
         let http_provider = Arc::new(
             ProviderBuilder::new()
                 .with_recommended_fillers()

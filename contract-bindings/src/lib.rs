@@ -43,9 +43,19 @@ impl std::fmt::Debug for TaskRegistry::TaskRequested {
     }
 }
 
+impl std::fmt::Debug for ClientAppRegistry::ClientAppMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "name: {:?}, description: {:?}, logo_url: {:?}, docker_url: {:?}",
+            self.name, self.description, self.logoUrl, self.dockerUrl
+        )
+    }
+}
+
 sol!(
     #[sol(rpc)]
-    ClientAppRegistryContract,
+    ClientAppRegistry,
     "../contracts/out/ClientAppRegistry.sol/ClientAppRegistry.json"
 );
 
