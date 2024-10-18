@@ -5,7 +5,7 @@
 //! - Start an Anvil instance using `anvil --ipc` in one terminal.
 //! - Deploy the contract using `make contracts-deploy` in a different terminal.
 //!
-//! ## TODO
+//! ## TODO(chalex-eth):
 //! - Currently, only IPC connections are supported as we are working locally.
 //! - Future improvements include adding support for WebSocket (Ws) and HTTP connections
 //!   over a generic type of Provider and Transport. This requires further exploration
@@ -18,7 +18,8 @@ pub const TASK_REGISTRY_ADDRESS: Address = address!("e7f1725E7734CE288F8367e1Bb1
 pub const CLIENT_APP_REGISTRY_ADDRESS: Address =
     address!("5FbDB2315678afecb367f032d93F642f64180aa3");
 
-// TODO: For now we provide the path to the compiled contract, but once the contract is "freeze" we can provide static ABI
+// TODO(chalex-eth): For now we provide the path to the compiled contract, but once the contract is
+// "frozen" we can provide static ABI
 
 sol!(
     #[sol(rpc)]
@@ -46,6 +47,7 @@ mod tests {
         // Create the provider.
         let ipc = IpcConnect::new(ipc_path.to_string());
         let provider = ProviderBuilder::new().on_ipc(ipc).await?;
+
         // Create a contract instance
         let task_registry = TaskRegistry::new(TASK_REGISTRY_ADDRESS, provider.clone());
         let owner = task_registry.owner().call().await?._0;
