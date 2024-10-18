@@ -17,10 +17,14 @@ contract DeployTaskAndAppRegistry is Script, Constants {
         vm.startBroadcast();
 
         clientAppRegistry = new ClientAppRegistry(msg.sender);
+        console2.log("ClientAppRegistry deployed at %s", address(clientAppRegistry));
+
         taskRegistry = new TaskRegistry(msg.sender, AGGREGATOR_NODE, address(clientAppRegistry));
+        console2.log("TaskRegistry deployed at %s", address(taskRegistry));
 
         bytes32 clientAppId = keccak256("ethereum-block-number");
         console2.logBytes32(clientAppId);
+
         clientAppRegistry.registerClientApp(
             clientAppId,
             ClientAppMetadata({
@@ -30,9 +34,6 @@ contract DeployTaskAndAppRegistry is Script, Constants {
                 dockerUrl: ""
             })
         );
-
-        console2.log("ClientAppRegistry deployed at %s", address(clientAppRegistry));
-        console2.log("TaskRegistry deployed at %s", address(taskRegistry));
 
         vm.stopBroadcast();
     }
