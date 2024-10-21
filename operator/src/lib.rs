@@ -1,14 +1,28 @@
 use alloy::{
-    providers::{IpcConnect, ProviderBuilder, RootProvider},
+    network::{Ethereum, EthereumWallet},
+    providers::{
+        fillers::{
+            BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller,
+            WalletFiller,
+        },
+        Identity, IpcConnect, Provider, ProviderBuilder, RootProvider,
+    },
     pubsub::PubSubFrontend,
+    signers::{local::PrivateKeySigner, Signer},
+    transports::http::{Client, Http},
 };
+use alloy_primitives::{Address, Bytes, FixedBytes, U256};
 use contract_bindings::{
+    AVSDirectory::{self, AVSDirectoryInstance},
+    ClientAppRegistry::{self, ClientAppMetadata, ClientAppRegistryInstance},
+    GizaAVS::{self, GizaAVSInstance},
+    ISignatureUtils::SignatureWithSaltAndExpiry,
     TaskRegistry::{self, TaskRegistryInstance},
-    TASK_REGISTRY_ADDRESS,
+    AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
 };
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 use tokio::{
     self,
     sync::mpsc::{self, Receiver, Sender},
@@ -16,31 +30,94 @@ use tokio::{
 };
 use tracing::{error, info, warn};
 
+pub type PubSubProviderWithSigner = Arc<
+    FillProvider<
+        JoinFill<
+            JoinFill<
+                Identity,
+                JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
+            >,
+            WalletFiller<EthereumWallet>,
+        >,
+        RootProvider<PubSubFrontend>,
+        PubSubFrontend,
+        Ethereum,
+    >,
+>;
+
+pub type HttpProviderWithSigner = Arc<
+    FillProvider<
+        JoinFill<
+            JoinFill<
+                Identity,
+                JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
+            >,
+            WalletFiller<EthereumWallet>,
+        >,
+        RootProvider<Http<Client>>,
+        Http<Client>,
+        Ethereum,
+    >,
+>;
+
 // Adjust this based on your expected load and system resources
 const QUEUE_CAPACITY: usize = 100;
 
 #[derive(Clone)]
 pub struct Operator {
-    task_registry: Arc<TaskRegistryInstance<PubSubFrontend, RootProvider<PubSubFrontend>>>,
+    operator_address: Address,
+    pubsub_provider: PubSubProviderWithSigner,
+    http_provider: HttpProviderWithSigner,
+    signer: PrivateKeySigner,
 }
 
 impl Operator {
     pub async fn new() -> Result<Self> {
-        // TODO(chalex-eth): Will have to make this WS and RPC Url configurable
+        // Init wallet, PK is for testing only
+        let private_key: PrivateKeySigner =
+            "2a7f875389f0ce57b6d3200fb88e9a95e864a2ff589e8b1b11e56faff32a1fc5"
+                .parse()
+                .unwrap();
+        let operator_address = private_key.address();
+        let wallet = EthereumWallet::from(private_key.clone());
+
+        //Create PubSubProvider
         let ipc_path = "/tmp/anvil.ipc";
         let ipc = IpcConnect::new(ipc_path.to_string());
-        let provider = ProviderBuilder::new()
-            .on_ipc(ipc)
-            .await
-            .wrap_err("Failed to create provider")?;
+        let pubsub_provider = Arc::new(
+            ProviderBuilder::new()
+                .with_recommended_fillers()
+                .wallet(wallet.clone())
+                .on_ipc(ipc)
+                .await
+                .wrap_err("Failed to create provider")?,
+        );
 
-        let task_registry = Arc::new(TaskRegistry::new(TASK_REGISTRY_ADDRESS, provider));
+        //Create HttpProvider
+        let rpc_url = "http://localhost:8545"
+            .parse()
+            .expect("Failed to parse URL");
+        let http_provider = Arc::new(
+            ProviderBuilder::new()
+                .with_recommended_fillers()
+                .wallet(wallet)
+                .on_http(rpc_url),
+        );
 
-        Ok(Self { task_registry })
+        Ok(Self {
+            operator_address,
+            pubsub_provider,
+            http_provider,
+            signer: private_key,
+        })
     }
 
     pub async fn run(&self) -> Result<()> {
         info!("Starting operator...");
+
+        //  self.register_operator().await?;
+
+        self.fetch_client_app().await?;
 
         // Create a bounded channel for task communication
         // NOTE: Using a bounded channel helps with backpressure, preventing the event listener from overwhelming the task processor. However, if the
@@ -59,10 +136,43 @@ impl Operator {
         Ok(())
     }
 
+    async fn fetch_client_app(&self) -> Result<()> {
+        let client_app_registry =
+            ClientAppRegistryInstance::new(CLIENT_APP_REGISTRY_ADDRESS, self.http_provider.clone());
+
+        // Fetch all the client apps registered
+        let clients_list = client_app_registry
+            .ClientAppRegistered_filter()
+            .query()
+            .await?
+            .into_iter()
+            .map(|(client_app_id, _)| client_app_id.clientAppId)
+            .collect::<Vec<_>>();
+
+        // Fetch the metadata for all the client apps
+        let mut client_apps: Vec<ClientAppMetadata> = Vec::new();
+        for client_app_id in clients_list {
+            let client_app = client_app_registry
+                .getClientAppMetadata(client_app_id)
+                .call()
+                .await?
+                ._0;
+            client_apps.push(client_app);
+        }
+
+        // For PoC let's assume operators opt for all the client apps
+        // Check if image is already downloaded, if not download the image
+        // Run a container for each client app
+
+        Ok(())
+    }
+
     async fn listen_for_events(self, tx: Sender<TaskRegistry::TaskRequested>) -> Result<()> {
-        // Create a stream of events from the the TaskRequested filter, will block until there is an incoming event
-        let mut stream = self
-            .task_registry
+        let task_registry =
+            TaskRegistryInstance::new(TASK_REGISTRY_ADDRESS, self.pubsub_provider.clone());
+
+        // Create a stream of events from the the TaskRequested filter, will block until there an incoming event
+        let mut stream = task_registry
             .TaskRequested_filter()
             .subscribe()
             .await
