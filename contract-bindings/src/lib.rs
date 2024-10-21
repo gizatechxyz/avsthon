@@ -26,6 +26,23 @@ sol!(
     TaskRegistry,
     "../contracts/out/TaskRegistry.sol/TaskRegistry.json"
 );
+
+impl std::fmt::Debug for TaskRegistry::TaskRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "app_id: {:?}", self.appId)
+    }
+}
+
+impl std::fmt::Debug for TaskRegistry::TaskRequested {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "task_id: {:?}, task_request: {:?}",
+            self.taskId, self.taskRequest
+        )
+    }
+}
+
 sol!(
     #[sol(rpc)]
     ClientAppRegistryContract,
