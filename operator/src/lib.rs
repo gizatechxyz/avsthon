@@ -22,6 +22,7 @@ use contract_bindings::{
     TaskRegistry::{self, TaskRegistryInstance},
     AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
 };
+use dirs::home_dir;
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
 use regex::Regex;
@@ -246,8 +247,10 @@ impl Operator {
             .map(|(client_app_id, _)| client_app_id.clientAppId)
             .collect::<Vec<_>>();
 
+        // TODO(eduponz): Handle panics here.
+        // TODO(eduponz): Support other Docker configurations.
         let docker = Docker::connect_with_socket(
-            "/Users/eduponz/.colima/docker.sock",
+            &(Operator::get_home_dir() + "/.colima/docker.sock"),
             120,
             API_DEFAULT_VERSION,
         )
@@ -393,5 +396,11 @@ impl Operator {
                 Err(eyre::eyre!("Task processor exited unexpectedly"))
             }
         }
+    }
+
+    fn get_home_dir() -> String {
+        return home_dir()
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| ".".to_string());
     }
 }
