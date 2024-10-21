@@ -14,12 +14,12 @@
 use alloy::sol;
 use alloy_primitives::{address, Address};
 
-pub const TASK_REGISTRY_ADDRESS: Address = address!("e7f1725E7734CE288F8367e1Bb143E90bb3F0512");
+pub const TASK_REGISTRY_ADDRESS: Address = address!("6Da3D07a6BF01F02fB41c02984a49B5d9Aa6ea92");
 pub const CLIENT_APP_REGISTRY_ADDRESS: Address =
-    address!("5FbDB2315678afecb367f032d93F642f64180aa3");
-
-// TODO(chalex-eth): For now we provide the path to the compiled contract, but once the contract is
-// "frozen" we can provide static ABI
+    address!("a8d297D643a11cE83b432e87eEBce6bee0fd2bAb");
+pub const AVS_DIRECTORY_ADDRESS: Address = address!("055733000064333CaDDbC92763c58BF0192fFeBf");
+pub const GIZA_AVS_ADDRESS: Address = address!("68d2Ecd85bDEbfFd075Fb6D87fFD829AD025DD5C");
+pub const OPERATOR_UJI_ADDRESS: Address = address!("37893031A8484066232AcBE6bFe7E2a7A4411a7d");
 
 sol!(
     #[sol(rpc)]
@@ -48,6 +48,18 @@ sol!(
     ClientAppRegistryContract,
     "../contracts/out/ClientAppRegistry.sol/ClientAppRegistry.json"
 );
+
+sol!(
+    #[sol(rpc)]
+    GizaAVS,
+    "../contracts/out/GizaAVS.sol/GizaAVS.json"
+);
+
+sol! {
+    #[sol(rpc)]
+    interface AVSDirectory {
+    function calculateOperatorAVSRegistrationDigestHash(address operator, address avs, bytes32 salt, uint256 expiry) external view returns (bytes32);
+}}
 
 #[cfg(test)]
 mod tests {

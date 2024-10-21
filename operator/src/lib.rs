@@ -5,17 +5,17 @@ use alloy::{
             BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller,
             WalletFiller,
         },
-        Identity, IpcConnect, Provider, ProviderBuilder, RootProvider,
+        Identity, IpcConnect, ProviderBuilder, RootProvider,
     },
     pubsub::PubSubFrontend,
     signers::{local::PrivateKeySigner, Signer},
     transports::http::{Client, Http},
 };
-use alloy_primitives::{Address, Bytes, FixedBytes, U256};
+use alloy_primitives::{Address, FixedBytes, U256};
 use contract_bindings::{
-    AVSDirectory::{self, AVSDirectoryInstance},
-    ClientAppRegistry::{self, ClientAppMetadata, ClientAppRegistryInstance},
-    GizaAVS::{self, GizaAVSInstance},
+    AVSDirectory::AVSDirectoryInstance,
+    ClientAppRegistry::{ClientAppMetadata, ClientAppRegistryInstance},
+    GizaAVS::GizaAVSInstance,
     ISignatureUtils::SignatureWithSaltAndExpiry,
     TaskRegistry::{self, TaskRegistryInstance},
     AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
@@ -29,21 +29,6 @@ use tokio::{
     task::JoinHandle,
 };
 use tracing::{error, info, warn};
-
-pub type PubSubProviderWithSigner = Arc<
-    FillProvider<
-        JoinFill<
-            JoinFill<
-                Identity,
-                JoinFill<GasFiller, JoinFill<BlobGasFiller, JoinFill<NonceFiller, ChainIdFiller>>>,
-            >,
-            WalletFiller<EthereumWallet>,
-        >,
-        RootProvider<PubSubFrontend>,
-        PubSubFrontend,
-        Ethereum,
-    >,
->;
 
 pub type HttpProviderWithSigner = Arc<
     FillProvider<
@@ -66,7 +51,7 @@ const QUEUE_CAPACITY: usize = 100;
 #[derive(Clone)]
 pub struct Operator {
     operator_address: Address,
-    pubsub_provider: PubSubProviderWithSigner,
+    pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
     http_provider: HttpProviderWithSigner,
     signer: PrivateKeySigner,
 }
@@ -84,10 +69,8 @@ impl Operator {
         //Create PubSubProvider
         let ipc_path = "/tmp/anvil.ipc";
         let ipc = IpcConnect::new(ipc_path.to_string());
-        let pubsub_provider = Arc::new(
+        let pubsub_provider: Arc<RootProvider<PubSubFrontend>> = Arc::new(
             ProviderBuilder::new()
-                .with_recommended_fillers()
-                .wallet(wallet.clone())
                 .on_ipc(ipc)
                 .await
                 .wrap_err("Failed to create provider")?,
@@ -115,7 +98,7 @@ impl Operator {
     pub async fn run(&self) -> Result<()> {
         info!("Starting operator...");
 
-        //  self.register_operator().await?;
+        self.register_operator_in_avs().await?;
 
         self.fetch_client_app().await?;
 
@@ -132,6 +115,115 @@ impl Operator {
 
         // Wait for both tasks to complete or handle errors
         self.handle_tasks(event_listener, task_processor).await?;
+
+        Ok(())
+    }
+
+    async fn register_operator_in_avs(&self) -> Result<()> {
+        let giza_avs = GizaAVSInstance::new(GIZA_AVS_ADDRESS, self.http_provider.clone());
+        let avs_directory =
+            AVSDirectoryInstance::new(AVS_DIRECTORY_ADDRESS, self.http_provider.clone());
+
+        // Register operator in GizaAVS
+        let is_operator_registered = giza_avs
+            .isOperatorRegistered(self.operator_address)
+            .call()
+            .await?
+            .isRegistered;
+
+        if is_operator_registered {
+            info!("Operator already registered");
+            return Ok(());
+        }
+
+        let salt = FixedBytes::<32>::from_str(
+            "0x2ef06b8bbad022ca2dd29795902ceb588d06d1cfd10cb6e687db0dbb837865e9",
+        )
+        .unwrap();
+        let expiry = U256::from(1779248899);
+
+        // Eigenlayer provide a view function to calculate the digest hash that needs to be signed
+        let digest_hash = avs_directory
+            .calculateOperatorAVSRegistrationDigestHash(
+                self.operator_address,
+                GIZA_AVS_ADDRESS,
+                salt,
+                expiry,
+            )
+            .call()
+            .await?
+            ._0;
+
+        // We signed the hash
+        let signed_digest = self.signer.sign_hash(&digest_hash).await?;
+
+        // Broadcast tx to register in EL contracts and GizaAVS contracts
+        let tx = giza_avs
+            .registerOperatorToAVS(
+                self.operator_address,
+                SignatureWithSaltAndExpiry {
+                    signature: signed_digest.as_bytes().into(),
+                    salt,
+                    expiry,
+                },
+            )
+            .send()
+            .await?
+            .watch()
+            .await?;
+        info!("GizaAVS registration submitted {:?}", tx);
+
+        // Check if the operator is registered
+        let is_operator_registered = giza_avs
+            .isOperatorRegistered(self.operator_address)
+            .call()
+            .await?
+            .isRegistered;
+
+        match is_operator_registered {
+            true => info!("Successfully registered operator in GizaAVS"),
+            false => {
+                return Err(eyre::eyre!("Operator registration failed"));
+            }
+        }
+
+        // Register client app in GizaAVS
+        let client_app_id: FixedBytes<32> = FixedBytes::<32>::from_str(
+            "0xc86aab04e8ef18a63006f43fa41a2a0150bae3dbe276d581fa8b5cde0ccbc966",
+        )
+        .unwrap();
+
+        let is_client_app_registered = giza_avs
+            .operatorClientAppIdRegistrationStatus(self.operator_address, client_app_id.clone())
+            .call()
+            .await?
+            .isRegistered;
+
+        if is_client_app_registered {
+            info!("Client app already registered");
+            return Ok(());
+        }
+
+        let tx = giza_avs
+            .optInClientAppId(client_app_id)
+            .send()
+            .await?
+            .watch()
+            .await?;
+        info!("Client app registration submitted {:?}", tx);
+
+        let is_client_app_registered = giza_avs
+            .operatorClientAppIdRegistrationStatus(self.operator_address, client_app_id.clone())
+            .call()
+            .await?
+            .isRegistered;
+
+        match is_client_app_registered {
+            true => info!("Successfully registered client app in GizaAVS"),
+            false => {
+                return Err(eyre::eyre!("Client app registration failed"));
+            }
+        }
 
         Ok(())
     }
