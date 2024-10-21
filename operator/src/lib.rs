@@ -235,6 +235,7 @@ impl Operator {
         // Fetch all the client apps registered
         let clients_list = client_app_registry
             .ClientAppRegistered_filter()
+            .from_block(2577255)
             .query()
             .await?
             .into_iter()
