@@ -3,8 +3,7 @@ use operator::Operator;
 use time::macros::format_description;
 use tracing_subscriber::fmt;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn init_tracing() {
     // Initialize the tracing subscriber with custom filter and format
     let format = fmt::format()
         .with_level(true)
@@ -22,7 +21,11 @@ async fn main() -> Result<()> {
         .event_format(format)
         .with_max_level(tracing::Level::INFO)
         .init();
+}
 
+#[tokio::main]
+async fn main() -> Result<()> {
+    init_tracing();
     let operator = Operator::new().await?;
     operator.run().await
 }

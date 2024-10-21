@@ -26,7 +26,7 @@ pub struct Operator {
 
 impl Operator {
     pub async fn new() -> Result<Self> {
-        // TODO : Will have to make this WS and RPC Url configurable
+        // TODO(chalex-eth): Will have to make this WS and RPC Url configurable
         let ipc_path = "/tmp/anvil.ipc";
         let ipc = IpcConnect::new(ipc_path.to_string());
         let provider = ProviderBuilder::new()
@@ -60,7 +60,7 @@ impl Operator {
     }
 
     async fn listen_for_events(self, tx: Sender<TaskRegistry::TaskRequested>) -> Result<()> {
-        // Create a stream of events from the the TaskRequested filter, will block until there an incoming event
+        // Create a stream of events from the the TaskRequested filter, will block until there is an incoming event
         let mut stream = self
             .task_registry
             .TaskRequested_filter()
@@ -80,7 +80,7 @@ impl Operator {
                     // to prevent indefinite blocking.
                     if let Err(e) = tx.send(event.0).await {
                         error!("Error sending task to queue: {:?}", e);
-                        // Implement retry logic or error handling strategy here
+                        // TODO(eduponz): Implement retry logic or error handling strategy here
                     }
                 }
                 Err(e) => error!("Error receiving event: {:?}", e),
