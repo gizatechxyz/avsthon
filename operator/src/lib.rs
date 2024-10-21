@@ -12,8 +12,10 @@ use alloy::{
     transports::http::{Client, Http},
 };
 use alloy_primitives::{Address, FixedBytes, U256};
-use bollard::Docker;
-use bollard::{image::CreateImageOptions, API_DEFAULT_VERSION};
+use bollard::{
+    container::Config, container::CreateContainerOptions, container::LogsOptions,
+    container::StartContainerOptions, image::CreateImageOptions, Docker, API_DEFAULT_VERSION,
+};
 use contract_bindings::{
     AVSDirectory::AVSDirectoryInstance,
     ClientAppRegistry::{ClientAppMetadata, ClientAppRegistryInstance},
@@ -368,12 +370,76 @@ impl Operator {
     }
 
     async fn process_tasks(self, mut rx: Receiver<TaskRegistry::TaskRequested>) {
+        let client_app_registry =
+            ClientAppRegistryInstance::new(CLIENT_APP_REGISTRY_ADDRESS, self.http_provider.clone());
+
         while let Some(task) = rx.recv().await {
             info!("Processing task: {:?}", task);
-            // Simulate work with a delay
-            // In a real scenario, this is where your task processing logic would go
-            // Consider implementing proper error handling and retries for task processing
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+
+            let client_app_id = task.taskRequest.appId;
+
+            info!("Getting metadata from ClientApp: {:?}", client_app_id);
+
+            let meta_data = client_app_registry
+                .getClientAppMetadata(client_app_id)
+                .call()
+                .await
+                .unwrap();
+
+            info!("Getting image from: {:?}", meta_data._0.dockerUrl);
+
+            let re = Regex::new(r"/layers/([^/]+/[^/]+)/([^/]+)/.+/sha256:([a-f0-9]+)").unwrap();
+
+            if let Some(caps) = re.captures(meta_data._0.dockerUrl.as_str()) {
+                let repository = &caps[1];
+
+                let docker = Docker::connect_with_socket(
+                    &(Operator::get_home_dir() + "/.colima/docker.sock"),
+                    120,
+                    API_DEFAULT_VERSION,
+                )
+                .unwrap();
+
+                let container_opts = CreateContainerOptions {
+                    name: "test",
+                    ..Default::default()
+                };
+
+                let container_conf = Config {
+                    tty: Some(true),
+                    attach_stdin: Some(true),
+                    image: Some(repository),
+                    ..Default::default()
+                };
+
+                let container = docker
+                    .create_container(Some(container_opts), container_conf)
+                    .await
+                    .unwrap();
+
+                docker
+                    .start_container(&container.id, None::<StartContainerOptions<String>>)
+                    .await
+                    .unwrap();
+
+                // TODO(eduponz): Find a better way to check if the container is done
+                tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+                let log_opts = LogsOptions::<String> {
+                    stdout: true,
+                    ..Default::default()
+                };
+
+                let mut logs = docker.logs(&container.id, Some(log_opts));
+
+                while let Some(log) = logs.next().await {
+                    info!("Container logs: {:?}", log);
+                }
+
+                docker.stop_container(&container.id, None).await.unwrap();
+
+                docker.remove_container(&container.id, None).await.unwrap();
+            }
 
             info!("Processed task: {:?}", task);
         }
