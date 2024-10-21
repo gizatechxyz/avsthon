@@ -12,16 +12,19 @@ use alloy::{
     transports::http::{Client, Http},
 };
 use alloy_primitives::{Address, FixedBytes, U256};
+use bollard::Docker;
+use bollard::{image::CreateImageOptions, API_DEFAULT_VERSION};
 use contract_bindings::{
     AVSDirectory::AVSDirectoryInstance,
+    ClientAppRegistry::{ClientAppMetadata, ClientAppRegistryInstance},
     GizaAVS::GizaAVSInstance,
     ISignatureUtils::SignatureWithSaltAndExpiry,
-    AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
-    ClientAppRegistry::{ClientAppMetadata, ClientAppRegistryInstance},
     TaskRegistry::{self, TaskRegistryInstance},
+    AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
 };
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
+use regex::Regex;
 use std::{str::FromStr, sync::Arc};
 use tokio::{
     self,
@@ -242,6 +245,73 @@ impl Operator {
             .into_iter()
             .map(|(client_app_id, _)| client_app_id.clientAppId)
             .collect::<Vec<_>>();
+
+        let docker = Docker::connect_with_socket(
+            "/Users/eduponz/.colima/docker.sock",
+            120,
+            API_DEFAULT_VERSION,
+        )
+        .unwrap();
+
+        for client_app_id in &clients_list {
+            info!("Getting metadata from ClientApp: {:?}", client_app_id);
+
+            let meta_data = client_app_registry
+                .getClientAppMetadata(client_app_id.clone())
+                .call()
+                .await?;
+
+            info!("Getting image from: {:?}", meta_data._0.dockerUrl);
+
+            let re = Regex::new(r"/layers/([^/]+/[^/]+)/([^/]+)/.+/sha256:([a-f0-9]+)").unwrap();
+
+            let repository: &str;
+            let tag: &str;
+
+            if let Some(caps) = re.captures(meta_data._0.dockerUrl.as_str()) {
+                repository = &caps[1];
+                tag = &caps[2];
+                // TODO(eduponz): This is the manifest digest, can be used to check if the image we have corresponds
+                //                to the one we want to download
+                _ = &caps[3];
+
+                info!("Downloading Docker image: {:?}:{:?}", repository, tag);
+
+                // Download the image if we don't have it
+                let options = CreateImageOptions {
+                    from_image: repository.to_string(),
+                    tag: tag.to_string(),
+                    ..Default::default()
+                };
+
+                // Request the image
+                let mut stream = docker.create_image(Some(options), None, None);
+
+                // Process the stream
+                while let Some(result) = stream.next().await {
+                    match result {
+                        Ok(build_info) => {
+                            if let Some(error) = build_info.error {
+                                error!("Error pulling image: {:?}", error);
+                                continue;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Error pulling image: {:?}", e);
+                            continue;
+                        }
+                    }
+                }
+
+                info!("Image pulled successfully");
+            } else {
+                error!(
+                    "No repository, tag, or digest found in URL: {:?}",
+                    meta_data._0.dockerUrl
+                );
+                continue;
+            }
+        }
 
         // Fetch the metadata for all the client apps
         let mut client_apps: Vec<ClientAppMetadata> = Vec::new();

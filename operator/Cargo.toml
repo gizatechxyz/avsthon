@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-futures = "0.3"
 alloy = { version = "0.4.2", features = ["full", "sol-types"] }
-tokio = { version = "1.40", features = ["full", "rt-multi-thread", "sync"] }
-contract-bindings = { path = "../contract-bindings" }
 alloy-primitives = "0.8.7"
+bollard = "0.17.1"
+contract-bindings = { path = "../contract-bindings" }
 eyre = "0.6.12"
+futures = "0.3"
+time = { version = "0.3", features = ["macros"] }
+tokio = { version = "1.40", features = ["full", "rt-multi-thread", "sync"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "time"] }
-time = { version = "0.3", features = ["macros"] }
+regex = "1.11.0"
