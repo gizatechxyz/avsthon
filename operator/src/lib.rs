@@ -210,7 +210,7 @@ impl Operator {
             .await?
             .watch()
             .await?;
-        info!("Client app registration submitted {:?}", tx);
+        info!("Operator successfully opted-in for Client app {:?}", tx);
 
         let is_client_app_registered = giza_avs
             .operatorClientAppIdRegistrationStatus(self.operator_address, client_app_id.clone())
