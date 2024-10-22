@@ -25,6 +25,7 @@ use contract_bindings::{
     AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
 };
 use docker_client::DockerClient;
+use eigen_crypto_bls::BlsKeyPair;
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
 use operator_config::OperatorConfig;
@@ -59,7 +60,8 @@ pub struct Operator {
     operator_address: Address,
     pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
     http_provider: HttpProviderWithSigner,
-    signer: PrivateKeySigner,
+    ecdsa_signer: PrivateKeySigner,
+    bls_key_pair: BlsKeyPair,
     docker: DockerClient,
 }
 
@@ -68,13 +70,9 @@ impl Operator {
         // Load operator configuration
         let config = OperatorConfig::from_env();
 
-        // Init wallet, PK is for testing only
-        let private_key: PrivateKeySigner =
-            "2a7f875389f0ce57b6d3200fb88e9a95e864a2ff589e8b1b11e56faff32a1fc5"
-                .parse()
-                .unwrap();
-        let operator_address = private_key.address();
-        let wallet = EthereumWallet::from(private_key.clone());
+        let ecdsa_signer = config.ecdsa_signer;
+        let operator_address = ecdsa_signer.address();
+        let wallet = EthereumWallet::from(ecdsa_signer.clone());
 
         //Create PubSubProvider
         let ipc_path = "/tmp/anvil.ipc";
@@ -110,8 +108,9 @@ impl Operator {
             operator_address,
             pubsub_provider,
             http_provider,
-            signer: private_key,
-            docker: docker,
+            ecdsa_signer,
+            bls_key_pair: config.bls_key_pair,
+            docker,
         })
     }
 
@@ -175,7 +174,7 @@ impl Operator {
             ._0;
 
         // We signed the hash
-        let signed_digest = self.signer.sign_hash(&digest_hash).await?;
+        let signed_digest = self.ecdsa_signer.sign_hash(&digest_hash).await?;
 
         // Broadcast tx to register in EL contracts and GizaAVS contracts
         let tx = giza_avs

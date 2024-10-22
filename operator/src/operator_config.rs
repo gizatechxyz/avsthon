@@ -1,11 +1,15 @@
+use alloy::signers::local::PrivateKeySigner;
 use dirs::home_dir;
 use dotenv::dotenv;
+use eigen_crypto_bls::BlsKeyPair;
 use std::env;
 
 /// `OperatorConfig` represents the configuration for the operator service.
 ///
 /// This struct holds the following configuration:
 /// - `docker_sock_path`: The path to the Docker socket file (docker.sock).
+/// - `ecdsa_signer`: The ECDSA signer for cryptographic operations.
+/// - `bls_key_pair`: The BLS key pair for cryptographic operations.
 ///
 /// The configuration is loaded from environment variables, with defaults based
 /// on the operating system (macOS/Linux). It optionally loads values from a
@@ -17,6 +21,18 @@ pub struct OperatorConfig {
     /// - Defaults to `/var/run/docker.sock` on Linux.
     /// - Can be overridden by the `DOCKER_SOCK_PATH` environment variable.
     pub docker_sock_path: String,
+
+    /// The ECDSA signer used for cryptographic operations.
+    /// - Currently initialized with a hardcoded private key.
+    /// - In production, this should be securely loaded from an environment variable
+    ///   or a secure key management system.
+    pub ecdsa_signer: PrivateKeySigner,
+
+    /// The BLS key pair used for cryptographic operations.
+    /// - Currently initialized with a hardcoded private key.
+    /// - In production, this should be securely loaded from an environment variable
+    ///   or a secure key management system.
+    pub bls_key_pair: BlsKeyPair,
 }
 
 impl OperatorConfig {
@@ -38,7 +54,23 @@ impl OperatorConfig {
         dotenv().ok();
 
         let docker_sock_path = Self::get_docker_sock_path();
-        Self { docker_sock_path }
+
+        let ecdsa_signer: PrivateKeySigner =
+            "2a7f875389f0ce57b6d3200fb88e9a95e864a2ff589e8b1b11e56faff32a1fc5"
+                .parse()
+                .expect("Failed to parse ECDSA private key");
+
+        let bls_key_pair = BlsKeyPair::new(
+            "15880505367010957571607010372625037364073898331367922938497268604068798728927"
+                .to_string(),
+        )
+        .expect("Failed to build BLS Key Pair");
+
+        Self {
+            docker_sock_path,
+            ecdsa_signer,
+            bls_key_pair,
+        }
     }
 
     /// Determines the Docker socket path, using the following logic:
