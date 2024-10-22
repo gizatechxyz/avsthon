@@ -1,6 +1,7 @@
 use bollard::{
     container::Config, container::CreateContainerOptions, container::LogsOptions,
-    container::StartContainerOptions, image::CreateImageOptions, Docker,
+    container::StartContainerOptions, container::WaitContainerOptions, image::CreateImageOptions,
+    Docker,
 };
 use eyre::Result;
 use futures::StreamExt;
@@ -51,6 +52,7 @@ impl DockerClient {
     }
 
     pub async fn run_image(&self, metadata: &DockerImageMetadata) -> Result<String> {
+        // Create a container from the image
         let container_opts = CreateContainerOptions {
             name: "test",
             ..Default::default()
@@ -68,13 +70,33 @@ impl DockerClient {
             .create_container(Some(container_opts), container_conf)
             .await?;
 
+        // Start the created container
         self.docker
             .start_container(&container.id, None::<StartContainerOptions<String>>)
             .await?;
 
-        // TODO(eduponz): Find a better way to check if the container is done
-        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        // Wait for the container to exit
+        let wait_opts = WaitContainerOptions {
+            condition: "not-running",
+            ..Default::default()
+        };
 
+        let mut wait_stream = self.docker.wait_container(&container.id, Some(wait_opts));
+
+        while let Some(result) = wait_stream.next().await {
+            match result {
+                Ok(wait_info) => {
+                    if let Some(error) = wait_info.error {
+                        return Err(eyre::eyre!("Error waiting for container: {:?}", error));
+                    }
+                }
+                Err(e) => {
+                    return Err(eyre::eyre!("Error waiting for container: {:?}", e));
+                }
+            }
+        }
+
+        // Get the logs from the exited container
         let log_opts = LogsOptions::<String> {
             stdout: true,
             ..Default::default()
@@ -82,15 +104,13 @@ impl DockerClient {
 
         let mut logs = self.docker.logs(&container.id, Some(log_opts));
 
-        // Append logs to the task output
         let mut output = String::new();
 
         while let Some(log) = logs.next().await {
             output.push_str(&log?.to_string());
         }
 
-        self.docker.stop_container(&container.id, None).await?;
-
+        // Remove the exited container
         self.docker.remove_container(&container.id, None).await?;
 
         return Ok(output);
