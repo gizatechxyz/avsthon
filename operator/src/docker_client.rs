@@ -8,21 +8,50 @@ use futures::StreamExt;
 use regex::Regex;
 use std::sync::Arc;
 
+/// `DockerImageMetadata` holds metadata for a Docker image.
 pub struct DockerImageMetadata {
+    /// The Docker repository for the image.
     pub repository: String,
+    /// The tag of the Docker image.
     pub tag: String,
 }
 
+/// `DockerClient` is a wrapper around the `Docker` struct provided by the `bollard` crate.
+/// It provides functionality to interact with Docker, such as pulling images and running containers.
 #[derive(Clone)]
 pub(super) struct DockerClient {
+    /// The underlying `Docker` client, wrapped in an `Arc` for shared ownership across threads.
     docker: Arc<Docker>,
 }
 
 impl DockerClient {
+    /// Constructs a new `DockerClient` from an existing `Docker` client.
+    ///
+    /// # Arguments
+    /// * `docker` - An `Arc<Docker>` object representing the Docker client.
+    ///
+    /// # Returns
+    /// A new instance of `DockerClient`.
     pub fn new(docker: Arc<Docker>) -> Self {
         Self { docker }
     }
 
+    /// Pulls a Docker image from the repository and tag specified in the `DockerImageMetadata`.
+    ///
+    /// This method streams the image download progress and handles any errors encountered during
+    /// the process.
+    ///
+    /// # Arguments
+    /// * `metadata` - A reference to `DockerImageMetadata` of the image to pull.
+    ///
+    /// # Errors
+    /// Returns an `eyre::Result<()>` if the image pull encounters any errors or the stream reports an error.
+    ///
+    /// # Example
+    /// ```rust
+    /// let metadata = DockerImageMetadata { repository: "hello-world".to_string(), tag: "latest".to_string() };
+    /// docker_client.pull_image(&metadata).await?;
+    /// ```
     pub async fn pull_image(&self, metadata: &DockerImageMetadata) -> Result<()> {
         // Download the image if we don't have it
         let options = CreateImageOptions {
@@ -48,9 +77,29 @@ impl DockerClient {
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 
+    /// Runs a Docker image and retrieves the output logs.
+    ///
+    /// This method creates a container from the specified image, starts it, waits for it to exit,
+    /// retrieves the logs, and then removes the container.
+    ///
+    /// # Arguments
+    /// * `metadata` - A reference to `DockerImageMetadata` of the image to run.
+    ///
+    /// # Returns
+    /// A `Result<String>` containing the container's output logs if successful.
+    ///
+    /// # Errors
+    /// Returns an `eyre::Result<String>` if any step (container creation, start, wait, log retrieval, or container removal) fails.
+    ///
+    /// # Example
+    /// ```rust
+    /// let metadata = DockerImageMetadata { repository: "hello-world".to_string(), tag: "latest".to_string() };
+    /// let output = docker_client.run_image(&metadata).await?;
+    /// println!("Container output: {}", output);
+    /// ```
     pub async fn run_image(&self, metadata: &DockerImageMetadata) -> Result<String> {
         // Create a container from the image
         let container_opts = CreateContainerOptions {
@@ -113,9 +162,28 @@ impl DockerClient {
         // Remove the exited container
         self.docker.remove_container(&container.id, None).await?;
 
-        return Ok(output);
+        Ok(output)
     }
 
+    /// Extracts the Docker image metadata (repository and tag) from a DockerHub URL.
+    ///
+    /// The method uses a regular expression to parse the URL and extract the repository and tag.
+    /// If the URL does not contain a valid repository or tag, an error is returned.
+    ///
+    /// # Arguments
+    /// * `dockerhub_url` - A string slice containing the DockerHub URL to parse.
+    ///
+    /// # Returns
+    /// A `Result<DockerImageMetadata>` containing the parsed repository and tag.
+    ///
+    /// # Errors
+    /// Returns an `eyre::Result<DockerImageMetadata>` if the URL does not contain valid repository or tag information.
+    ///
+    /// # Example
+    /// ```rust
+    /// let metadata = docker_client.image_metadata("https://hub.docker.com/layers/library/hello-world/latest/images/sha256:e2fc4e5")?;
+    /// println!("Repository: {}, Tag: {}", metadata.repository, metadata.tag);
+    /// ```
     pub fn image_metadata(&self, dockerhub_url: &str) -> Result<DockerImageMetadata> {
         // Regex captures the repository, tag, and manifest digest from the URL
         let re = Regex::new(r"/layers/([^/]+/[^/]+)/([^/]+)/.+/sha256:([a-f0-9]+)").unwrap();
@@ -133,10 +201,7 @@ impl DockerClient {
             ));
         }
 
-        let metadata = DockerImageMetadata {
-            repository: repository,
-            tag: tag,
-        };
+        let metadata = DockerImageMetadata { repository, tag };
 
         Ok(metadata)
     }
