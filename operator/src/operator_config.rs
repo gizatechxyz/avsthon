@@ -1,3 +1,4 @@
+use alloy::signers::local::PrivateKeySigner;
 use dirs::home_dir;
 use dotenv::dotenv;
 use std::env;
@@ -6,6 +7,7 @@ use std::env;
 ///
 /// This struct holds the following configuration:
 /// - `docker_sock_path`: The path to the Docker socket file (docker.sock).
+/// - `ecdsa_signer`: The ECDSA signer for cryptographic operations.
 ///
 /// The configuration is loaded from environment variables, with defaults based
 /// on the operating system (macOS/Linux). It optionally loads values from a
@@ -17,6 +19,12 @@ pub struct OperatorConfig {
     /// - Defaults to `/var/run/docker.sock` on Linux.
     /// - Can be overridden by the `DOCKER_SOCK_PATH` environment variable.
     pub docker_sock_path: String,
+
+    /// The ECDSA signer used for cryptographic operations.
+    /// - Currently initialized with a hardcoded private key.
+    /// - In production, this should be securely loaded from an environment variable
+    ///   or a secure key management system.
+    pub ecdsa_signer: PrivateKeySigner,
 }
 
 impl OperatorConfig {
@@ -38,7 +46,16 @@ impl OperatorConfig {
         dotenv().ok();
 
         let docker_sock_path = Self::get_docker_sock_path();
-        Self { docker_sock_path }
+
+        let ecdsa_signer: PrivateKeySigner =
+            "2a7f875389f0ce57b6d3200fb88e9a95e864a2ff589e8b1b11e56faff32a1fc5"
+                .parse()
+                .unwrap();
+
+        Self {
+            docker_sock_path,
+            ecdsa_signer,
+        }
     }
 
     /// Determines the Docker socket path, using the following logic:
