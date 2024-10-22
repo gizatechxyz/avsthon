@@ -25,6 +25,7 @@ use contract_bindings::{
     AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
 };
 use docker_client::DockerClient;
+use eigen_crypto_bls::BlsKeyPair;
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
 use operator_config::OperatorConfig;
@@ -60,6 +61,7 @@ pub struct Operator {
     pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
     http_provider: HttpProviderWithSigner,
     ecdsa_signer: PrivateKeySigner,
+    bls_key_pair: BlsKeyPair,
     docker: DockerClient,
 }
 
@@ -107,6 +109,7 @@ impl Operator {
             pubsub_provider,
             http_provider,
             ecdsa_signer,
+            bls_key_pair: config.bls_key_pair,
             docker,
         })
     }
