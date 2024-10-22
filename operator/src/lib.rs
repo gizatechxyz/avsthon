@@ -1,3 +1,6 @@
+mod docker_client;
+mod operator_config;
+
 use alloy::{
     network::{Ethereum, EthereumWallet},
     providers::{
@@ -12,16 +15,19 @@ use alloy::{
     transports::http::{Client, Http},
 };
 use alloy_primitives::{Address, FixedBytes, U256};
+use bollard::{Docker, API_DEFAULT_VERSION};
 use contract_bindings::{
     AVSDirectory::AVSDirectoryInstance,
-    ClientAppRegistry::{ClientAppMetadata, ClientAppRegistryInstance},
+    ClientAppRegistry::ClientAppRegistryInstance,
     GizaAVS::GizaAVSInstance,
     ISignatureUtils::SignatureWithSaltAndExpiry,
     TaskRegistry::{self, TaskRegistryInstance},
     AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
 };
+use docker_client::DockerClient;
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
+use operator_config::OperatorConfig;
 use std::{str::FromStr, sync::Arc};
 use tokio::{
     self,
@@ -54,10 +60,14 @@ pub struct Operator {
     pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
     http_provider: HttpProviderWithSigner,
     signer: PrivateKeySigner,
+    docker: DockerClient,
 }
 
 impl Operator {
     pub async fn new() -> Result<Self> {
+        // Load operator configuration
+        let config = OperatorConfig::from_env();
+
         // Init wallet, PK is for testing only
         let private_key: PrivateKeySigner =
             "2a7f875389f0ce57b6d3200fb88e9a95e864a2ff589e8b1b11e56faff32a1fc5"
@@ -80,6 +90,7 @@ impl Operator {
         let rpc_url = "http://localhost:8545"
             .parse()
             .expect("Failed to parse URL");
+
         let http_provider = Arc::new(
             ProviderBuilder::new()
                 .with_recommended_fillers()
@@ -87,11 +98,20 @@ impl Operator {
                 .on_http(rpc_url),
         );
 
+        let docker_connection = Arc::new(Docker::connect_with_socket(
+            config.docker_sock_path.as_str(),
+            120,
+            API_DEFAULT_VERSION,
+        )?);
+
+        let docker = DockerClient::new(docker_connection);
+
         Ok(Self {
             operator_address,
             pubsub_provider,
             http_provider,
             signer: private_key,
+            docker: docker,
         })
     }
 
@@ -229,10 +249,10 @@ impl Operator {
     }
 
     async fn fetch_client_app(&self) -> Result<()> {
+        // Fetch all the client apps registered
         let client_app_registry =
             ClientAppRegistryInstance::new(CLIENT_APP_REGISTRY_ADDRESS, self.http_provider.clone());
 
-        // Fetch all the client apps registered
         let clients_list = client_app_registry
             .ClientAppRegistered_filter()
             .from_block(2577255)
@@ -242,20 +262,43 @@ impl Operator {
             .map(|(client_app_id, _)| client_app_id.clientAppId)
             .collect::<Vec<_>>();
 
-        // Fetch the metadata for all the client apps
-        let mut client_apps: Vec<ClientAppMetadata> = Vec::new();
-        for client_app_id in clients_list {
-            let client_app = client_app_registry
-                .getClientAppMetadata(client_app_id)
-                .call()
-                .await?
-                ._0;
-            client_apps.push(client_app);
-        }
+        // Download the Docker images of the client apps
+        for client_app_id in &clients_list {
+            info!("Getting metadata of ClientApp: {:?}", client_app_id);
 
-        // For PoC let's assume operators opt for all the client apps
-        // Check if image is already downloaded, if not download the image
-        // Run a container for each client app
+            let app_metadata = match client_app_registry
+                .getClientAppMetadata(client_app_id.clone())
+                .call()
+                .await
+            {
+                Ok(metadata) => metadata._0,
+                _ => {
+                    error!("Error getting client app metadata");
+                    continue;
+                }
+            };
+
+            info!("Getting image from: {:?}", app_metadata.dockerUrl);
+
+            let image_metadata = match self.docker.image_metadata(app_metadata.dockerUrl.as_str()) {
+                Ok(metadata) => metadata,
+                _ => {
+                    error!("Error getting image metadata");
+                    continue;
+                }
+            };
+
+            match self.docker.pull_image(&image_metadata).await {
+                Err(e) => {
+                    error!("Error pulling image: {:?}", e);
+                    continue;
+                }
+                _ => info!(
+                    "Pulled successfully image: {:?}:{:?}",
+                    image_metadata.repository, image_metadata.tag
+                ),
+            }
+        }
 
         Ok(())
     }
@@ -294,14 +337,45 @@ impl Operator {
     }
 
     async fn process_tasks(self, mut rx: Receiver<TaskRegistry::TaskRequested>) {
+        let client_app_registry =
+            ClientAppRegistryInstance::new(CLIENT_APP_REGISTRY_ADDRESS, self.http_provider.clone());
+
         while let Some(task) = rx.recv().await {
             info!("Processing task: {:?}", task);
-            // Simulate work with a delay
-            // In a real scenario, this is where your task processing logic would go
-            // Consider implementing proper error handling and retries for task processing
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 
-            info!("Processed task: {:?}", task);
+            let client_app_id = task.taskRequest.appId;
+
+            info!("Getting metadata of ClientApp: {:?}", client_app_id);
+
+            let app_metadata = match client_app_registry
+                .getClientAppMetadata(client_app_id)
+                .call()
+                .await
+            {
+                Ok(metadata) => metadata._0,
+                _ => {
+                    error!("Error getting client app metadata");
+                    continue;
+                }
+            };
+
+            let image_metadata = match self.docker.image_metadata(app_metadata.dockerUrl.as_str()) {
+                Ok(metadata) => metadata,
+                _ => {
+                    error!("Error getting image metadata");
+                    continue;
+                }
+            };
+
+            info!(
+                "Running image: {:?}:{:?}",
+                image_metadata.repository, image_metadata.tag
+            );
+
+            match self.docker.run_image(&image_metadata).await {
+                Ok(result) => info!("Processed task: {:?}. Result: {:?}", task, result),
+                Err(e) => error!("Error processing task: {:?}", e),
+            }
         }
     }
 
