@@ -1,4 +1,5 @@
 mod docker_client;
+mod operator_config;
 
 use alloy::{
     network::{Ethereum, EthereumWallet},
@@ -23,10 +24,10 @@ use contract_bindings::{
     TaskRegistry::{self, TaskRegistryInstance},
     AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
 };
-use dirs::home_dir;
 use docker_client::DockerClient;
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
+use operator_config::OperatorConfig;
 use std::{str::FromStr, sync::Arc};
 use tokio::{
     self,
@@ -64,6 +65,9 @@ pub struct Operator {
 
 impl Operator {
     pub async fn new() -> Result<Self> {
+        // Load operator configuration
+        let config = OperatorConfig::from_env();
+
         // Init wallet, PK is for testing only
         let private_key: PrivateKeySigner =
             "2a7f875389f0ce57b6d3200fb88e9a95e864a2ff589e8b1b11e56faff32a1fc5"
@@ -94,16 +98,11 @@ impl Operator {
                 .on_http(rpc_url),
         );
 
-        // TODO(eduponz): Handle error
-        // TODO(eduponz): Support other Docker configurations.
-        let docker_connection = Arc::new(
-            Docker::connect_with_socket(
-                &(Operator::get_home_dir() + "/.colima/docker.sock"),
-                120,
-                API_DEFAULT_VERSION,
-            )
-            .unwrap(),
-        );
+        let docker_connection = Arc::new(Docker::connect_with_socket(
+            config.docker_sock_path.as_str(),
+            120,
+            API_DEFAULT_VERSION,
+        )?);
 
         let docker = DockerClient::new(docker_connection);
 
@@ -397,11 +396,5 @@ impl Operator {
                 Err(eyre::eyre!("Task processor exited unexpectedly"))
             }
         }
-    }
-
-    fn get_home_dir() -> String {
-        return home_dir()
-            .map(|path| path.to_string_lossy().into_owned())
-            .unwrap_or_else(|| ".".to_string());
     }
 }

@@ -9,6 +9,7 @@ alloy-primitives = "0.8.7"
 bollard = "0.17.1"
 contract-bindings = { path = "../contract-bindings" }
 dirs = "5"
+dotenv = "0.15"
 eyre = "0.6.12"
 futures = "0.3"
 regex = "1.11.0"
