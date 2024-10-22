@@ -7,7 +7,6 @@ use futures::StreamExt;
 use regex::Regex;
 use std::sync::Arc;
 
-// TODO(eduponz): Handle manifest digest
 pub struct DockerImageMetadata {
     pub repository: String,
     pub tag: String,
@@ -64,18 +63,14 @@ impl DockerClient {
             ..Default::default()
         };
 
-        // TODO(eduponz): Handle error
         let container = self
             .docker
             .create_container(Some(container_opts), container_conf)
-            .await
-            .unwrap();
+            .await?;
 
-        // TODO(eduponz): Handle error
         self.docker
             .start_container(&container.id, None::<StartContainerOptions<String>>)
-            .await
-            .unwrap();
+            .await?;
 
         // TODO(eduponz): Find a better way to check if the container is done
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
@@ -91,21 +86,12 @@ impl DockerClient {
         let mut output = String::new();
 
         while let Some(log) = logs.next().await {
-            // TODO(eduponz): Handle error
-            output.push_str(&log.unwrap().to_string());
+            output.push_str(&log?.to_string());
         }
 
-        // TODO(eduponz): Handle error
-        self.docker
-            .stop_container(&container.id, None)
-            .await
-            .unwrap();
+        self.docker.stop_container(&container.id, None).await?;
 
-        // TODO(eduponz): Handle error
-        self.docker
-            .remove_container(&container.id, None)
-            .await
-            .unwrap();
+        self.docker.remove_container(&container.id, None).await?;
 
         return Ok(output);
     }

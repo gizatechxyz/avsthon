@@ -254,7 +254,6 @@ impl Operator {
         let client_app_registry =
             ClientAppRegistryInstance::new(CLIENT_APP_REGISTRY_ADDRESS, self.http_provider.clone());
 
-        // TODO(eduponz): Handle error
         let clients_list = client_app_registry
             .ClientAppRegistered_filter()
             .from_block(2577255)
@@ -268,28 +267,38 @@ impl Operator {
         for client_app_id in &clients_list {
             info!("Getting metadata of ClientApp: {:?}", client_app_id);
 
-            // TODO(eduponz): Handle error
-            let app_metadata = client_app_registry
+            let app_metadata = match client_app_registry
                 .getClientAppMetadata(client_app_id.clone())
                 .call()
-                .await?
-                ._0;
+                .await
+            {
+                Ok(metadata) => metadata._0,
+                _ => {
+                    error!("Error getting client app metadata");
+                    continue;
+                }
+            };
 
             info!("Getting image from: {:?}", app_metadata.dockerUrl);
 
-            // TODO(eduponz): Handle error
-            let image_metadata = self
-                .docker
-                .image_metadata(app_metadata.dockerUrl.as_str())
-                .unwrap();
+            let image_metadata = match self.docker.image_metadata(app_metadata.dockerUrl.as_str()) {
+                Ok(metadata) => metadata,
+                _ => {
+                    error!("Error getting image metadata");
+                    continue;
+                }
+            };
 
-            // TODO(eduponz): Handle error
-            self.docker.pull_image(&image_metadata).await?;
-
-            info!(
-                "Pulled successfully image: {:?}:{:?}",
-                image_metadata.repository, image_metadata.tag
-            );
+            match self.docker.pull_image(&image_metadata).await {
+                Err(e) => {
+                    error!("Error pulling image: {:?}", e);
+                    continue;
+                }
+                _ => info!(
+                    "Pulled successfully image: {:?}:{:?}",
+                    image_metadata.repository, image_metadata.tag
+                ),
+            }
         }
 
         Ok(())
@@ -339,28 +348,35 @@ impl Operator {
 
             info!("Getting metadata of ClientApp: {:?}", client_app_id);
 
-            let app_metadata = client_app_registry
+            let app_metadata = match client_app_registry
                 .getClientAppMetadata(client_app_id)
                 .call()
                 .await
-                .unwrap()
-                ._0;
+            {
+                Ok(metadata) => metadata._0,
+                _ => {
+                    error!("Error getting client app metadata");
+                    continue;
+                }
+            };
 
-            // TODO(eduponz): Handle error
-            let image_metadata = self
-                .docker
-                .image_metadata(app_metadata.dockerUrl.as_str())
-                .unwrap();
+            let image_metadata = match self.docker.image_metadata(app_metadata.dockerUrl.as_str()) {
+                Ok(metadata) => metadata,
+                _ => {
+                    error!("Error getting image metadata");
+                    continue;
+                }
+            };
 
             info!(
                 "Running image: {:?}:{:?}",
                 image_metadata.repository, image_metadata.tag
             );
 
-            // TODO(eduponz): Handle error
-            let result = self.docker.run_image(&image_metadata).await.unwrap();
-
-            info!("Processed task: {:?}. Result: {:?}", task, result);
+            match self.docker.run_image(&image_metadata).await {
+                Ok(result) => info!("Processed task: {:?}. Result: {:?}", task, result),
+                Err(e) => error!("Error processing task: {:?}", e),
+            }
         }
     }
 
