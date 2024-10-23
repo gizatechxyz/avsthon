@@ -967,6 +967,7 @@ dependencies = [
  "alloy",
  "alloy-primitives",
  "eyre",
+ "serde",
  "tokio",
 ]
 

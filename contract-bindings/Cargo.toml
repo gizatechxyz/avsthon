@@ -7,4 +7,5 @@ edition = "2021"
 alloy = { version = "0.4.2", features = ["full", "sol-types"] }
 alloy-primitives = "0.8.7"
 eyre = "0.6.12"
+serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1.40", features = ["full"] }
