@@ -9,25 +9,42 @@ use alloy::{
         Identity, IpcConnect, ProviderBuilder, RootProvider,
     },
     pubsub::PubSubFrontend,
-    signers::{local::PrivateKeySigner, Signer},
+    signers::local::PrivateKeySigner,
     transports::http::{Client, Http},
 };
 use alloy_primitives::{Address, FixedBytes, U256};
 use contract_bindings::{
-    AVSDirectory::AVSDirectoryInstance,
-    GizaAVS::GizaAVSInstance,
-    TaskRegistry::{self, TaskRegistryInstance},
-    TaskStatus, AVS_DIRECTORY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
+    AVSDirectory::AVSDirectoryInstance, GizaAVS::GizaAVSInstance,
+    TaskRegistry::TaskRegistryInstance, TaskStatus, AVS_DIRECTORY_ADDRESS, GIZA_AVS_ADDRESS,
+    TASK_REGISTRY_ADDRESS,
 };
-use eyre::{Result, WrapErr};
+use eyre::Result;
 use futures::StreamExt;
+use server::{AppState, OperatorResponse};
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::RwLock;
+use thiserror::Error;
+use tokio::sync::{mpsc, RwLock};
 use tracing::{error, info};
 
 pub mod aggregator_config;
 pub mod server;
 
+// Define custom error types for better error handling and reporting
+#[derive(Error, Debug)]
+pub enum AggregatorError {
+    #[error("Failed to initialize provider: {0}")]
+    ProviderInitError(String),
+    #[error("Failed to fetch operator list: {0}")]
+    OperatorListFetchError(String),
+    #[error("Failed to fetch task history: {0}")]
+    TaskHistoryFetchError(String),
+    #[error("Task listener error: {0}")]
+    TaskListenerError(String),
+    #[error("Server error: {0}")]
+    ServerError(String),
+}
+
+// Type alias for the complex provider type to improve readability
 pub type HttpProviderWithSigner = Arc<
     FillProvider<
         JoinFill<
@@ -43,10 +60,10 @@ pub type HttpProviderWithSigner = Arc<
     >,
 >;
 
-#[derive(Clone)]
+// Main Aggregator struct representing the core functionality
 pub struct Aggregator {
     aggregator_address: Address,
-    operator_list: Vec<Address>,
+    operator_list: Arc<RwLock<Vec<Address>>>,
     tasks: Arc<RwLock<HashMap<FixedBytes<32>, TaskStatus>>>,
     http_provider: HttpProviderWithSigner,
     pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
@@ -54,17 +71,18 @@ pub struct Aggregator {
 }
 
 impl Aggregator {
-    pub async fn new() -> Result<Self> {
+    // Initialize a new Aggregator instance
+    pub async fn new() -> Result<Self, AggregatorError> {
         let config = AggregatorConfig::from_env();
 
         let ecdsa_signer = config.ecdsa_signer;
         let aggregator_address = ecdsa_signer.address();
         let wallet = EthereumWallet::from(ecdsa_signer.clone());
 
-        //Create HttpProvider
+        // Create HttpProvider
         let rpc_url = "http://localhost:8545"
             .parse()
-            .expect("Failed to parse URL");
+            .expect("Failed to parse RPC URL");
 
         let http_provider = Arc::new(
             ProviderBuilder::new()
@@ -73,19 +91,19 @@ impl Aggregator {
                 .on_http(rpc_url),
         );
 
-        //Create PubSubProvider
+        // Create PubSubProvider
         let ipc_path = "/tmp/anvil.ipc";
         let ipc = IpcConnect::new(ipc_path.to_string());
         let pubsub_provider: Arc<RootProvider<PubSubFrontend>> = Arc::new(
             ProviderBuilder::new()
                 .on_ipc(ipc)
                 .await
-                .expect("Failed to create provider"),
+                .map_err(|e| AggregatorError::ProviderInitError(e.to_string()))?,
         );
 
         Ok(Self {
             aggregator_address,
-            operator_list: vec![],
+            operator_list: Arc::new(RwLock::new(vec![])),
             tasks: Arc::new(RwLock::new(HashMap::new())),
             http_provider,
             pubsub_provider,
@@ -93,9 +111,21 @@ impl Aggregator {
         })
     }
 
-    pub async fn run(&mut self) -> Result<()> {
-        self.operator_list = self.fetch_operator_list().await?;
-        *self.tasks.write().await = self.fetch_task_history().await?;
+    // Main run function to start the Aggregator
+    pub async fn run(&self) -> Result<(), AggregatorError> {
+        // Fetch and update operator list
+        {
+            let fetched_operators = self.fetch_operator_list().await?;
+            let mut operator_list = self.operator_list.write().await;
+            *operator_list = fetched_operators;
+        } // operator_list write lock is released here
+
+        // Fetch and update task history
+        {
+            let fetched_tasks = self.fetch_task_history().await?;
+            let mut tasks = self.tasks.write().await;
+            *tasks = fetched_tasks;
+        } // tasks write lock is released here
 
         // Spawn the task listener
         let tasks = self.tasks.clone();
@@ -106,86 +136,102 @@ impl Aggregator {
             }
         });
 
+        // Create a channel to process operator responses
+        let (tx, rx) = mpsc::channel::<OperatorResponse>(100);
+        tokio::spawn(Self::process_operator_response(rx));
+
         // Start the server
         info!("Initialization complete. Starting server...");
-        let server_handle = tokio::spawn(server::run_server(self.tasks.clone()));
+        let app_state = AppState {
+            operator_list: self.operator_list.clone(),
+            tasks: self.tasks.clone(),
+            sender: tx,
+        };
 
-        // Wait for the server to finish (this will run indefinitely)
-        match server_handle.await {
-            Ok(_) => info!("Server has stopped"),
-            Err(e) => tracing::error!("Server error: {}", e),
-        }
-
-        Ok(())
+        server::run_server(app_state)
+            .await
+            .map_err(|e| AggregatorError::ServerError(e.to_string()))
     }
 
-    async fn fetch_operator_list(&self) -> Result<Vec<Address>> {
+    // Fetch the list of registered operators
+    async fn fetch_operator_list(&self) -> Result<Vec<Address>, AggregatorError> {
         info!("Fetching operator list");
         let giza_avs = GizaAVSInstance::new(GIZA_AVS_ADDRESS, self.http_provider.clone());
         let avs_directory =
             AVSDirectoryInstance::new(AVS_DIRECTORY_ADDRESS, self.http_provider.clone());
 
-        // We first fetch operators list into GizaAVS
-        let mut operator_list = giza_avs
+        // Fetch operators list from GizaAVS
+        let operator_list = giza_avs
             .OperatorRegistered_filter()
             .from_block(2577255)
             .query()
-            .await?
+            .await
+            .map_err(|e| AggregatorError::OperatorListFetchError(e.to_string()))?
             .into_iter()
             .map(|(operator_address, _)| operator_address.operator)
             .collect::<Vec<_>>();
 
-        // We then filter out the operators that are not registered in AVS Directory (double check to make sure operators is registered in AVS Directory)
-        for operator in operator_list.clone() {
+        // Filter out operators not registered in AVS Directory
+        let mut registered_operators = Vec::new();
+        for &operator in &operator_list {
             let is_registered = avs_directory
                 .avsOperatorStatus(GIZA_AVS_ADDRESS, operator)
                 .call()
-                .await?;
-
-            if is_registered._0 == U256::ZERO {
-                operator_list.retain(|&x| x != operator);
+                .await
+                .map(|status| status._0 != U256::ZERO)
+                .unwrap_or(false);
+            if is_registered {
+                registered_operators.push(operator);
             }
         }
 
-        Ok(operator_list)
+        Ok(registered_operators)
     }
 
-    async fn fetch_task_history(&self) -> Result<HashMap<FixedBytes<32>, TaskStatus>> {
+    // Fetch the history of tasks
+    async fn fetch_task_history(
+        &self,
+    ) -> Result<HashMap<FixedBytes<32>, TaskStatus>, AggregatorError> {
         info!("Fetching task history");
         let task_registry =
             TaskRegistryInstance::new(TASK_REGISTRY_ADDRESS, self.http_provider.clone());
 
-        // We get the history of tasks created in TaskRegistry
         let task_list = task_registry
             .TaskRequested_filter()
             .from_block(2577255)
             .query()
-            .await?
+            .await
+            .map_err(|e| AggregatorError::TaskHistoryFetchError(e.to_string()))?
             .into_iter()
             .map(|(task_id, _)| task_id.taskId)
             .collect::<Vec<_>>();
 
-        // We update the status of each task in the task history
         let mut tasks = HashMap::new();
         for task in task_list {
-            let task_status = task_registry.tasks(task).call().await?._0;
+            let task_status = task_registry
+                .tasks(task)
+                .call()
+                .await
+                .map_err(|e| AggregatorError::TaskHistoryFetchError(e.to_string()))?
+                ._0;
             tasks.insert(task, TaskStatus::from(task_status));
         }
 
         Ok(tasks)
     }
 
+    // Listen for new tasks and update the task list
     async fn listen_for_task(
         tasks: Arc<RwLock<HashMap<FixedBytes<32>, TaskStatus>>>,
         pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
-    ) -> Result<()> {
+    ) -> Result<(), AggregatorError> {
         let task_registry = TaskRegistryInstance::new(TASK_REGISTRY_ADDRESS, pubsub_provider);
 
         let mut stream = task_registry
             .TaskRequested_filter()
             .subscribe()
             .await
-            .wrap_err("Failed to subscribe to TaskRegistry events")?
+            .map_err(|e| AggregatorError::TaskListenerError(e.to_string()))?
             .into_stream();
 
         info!("Subscribed to TaskRegistry events. Waiting for events...");
@@ -193,14 +239,8 @@ impl Aggregator {
         while let Some(log) = stream.next().await {
             match log {
                 Ok(event) => {
-                    // Send the task to the processing queue
-                    // NOTE: If the channel is full, this will block until there's space.
-                    // Consider using `try_send` or implementing a timeout mechanism
-                    // to prevent indefinite blocking.
-                    tasks
-                        .write()
-                        .await
-                        .insert(event.0.taskId.clone(), TaskStatus::PENDING);
+                    let mut tasks = tasks.write().await;
+                    tasks.insert(event.0.taskId.clone(), TaskStatus::PENDING);
                     info!("New task received: {:?}", event.0.taskId);
                 }
                 Err(e) => error!("Error receiving event: {:?}", e),
@@ -208,5 +248,13 @@ impl Aggregator {
         }
 
         Ok(())
+    }
+
+    // Process operator responses
+    async fn process_operator_response(mut rx: mpsc::Receiver<OperatorResponse>) {
+        while let Some(response) = rx.recv().await {
+            info!("Received response: {:?}", response);
+            // TODO: Implement response processing logic
+        }
     }
 }

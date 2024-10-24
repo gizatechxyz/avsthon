@@ -14,7 +14,10 @@ eigen-crypto-bls = "0.1.0"
 eyre = "0.6.12"
 futures = "0.3"
 regex = "1.11.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
 time = { version = "0.3", features = ["macros"] }
 tokio = { version = "1.40", features = ["full", "rt-multi-thread", "sync"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "time"] }
+reqwest = { version = "0.12.8", features = ["json"] }

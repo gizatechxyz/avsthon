@@ -54,7 +54,7 @@ impl std::fmt::Debug for ClientAppRegistry::ClientAppMetadata {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub enum TaskStatus {
     EMPTY,
     PENDING,
