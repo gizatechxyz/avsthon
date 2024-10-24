@@ -43,6 +43,8 @@ pub enum AggregatorError {
     TaskListenerError(String),
     #[error("Server error: {0}")]
     ServerError(String),
+    #[error("Signature error: {0}")]
+    SignatureError(String),
 }
 
 // Type alias for the complex provider type to improve readability
@@ -68,7 +70,7 @@ pub struct Aggregator {
     aggregator_address: Address,
     operator_list: Arc<DashMap<Address, ()>>,
     tasks: Arc<DashMap<FixedBytes<32>, TaskStatus>>,
-    operator_responses: OperatorResponsesByTaskId,
+    operator_responses: Arc<OperatorResponsesByTaskId>,
     http_provider: HttpProviderWithSigner,
     pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
     ecdsa_signer: PrivateKeySigner,
@@ -109,7 +111,7 @@ impl Aggregator {
             aggregator_address,
             operator_list: Arc::new(DashMap::new()),
             tasks: Arc::new(DashMap::new()),
-            operator_responses: DashMap::new(),
+            operator_responses: Arc::new(DashMap::new()),
             http_provider,
             pubsub_provider,
             ecdsa_signer,
@@ -140,7 +142,7 @@ impl Aggregator {
         // Create a channel to process operator responses
         let (tx, rx) = mpsc::channel::<OperatorResponse>(100);
         let operator_responses = self.operator_responses.clone();
-        // tokio::spawn(Self::process_operator_response(rx, operator_responses));
+        tokio::spawn(Self::queue_operator_response(rx, operator_responses));
 
         // Start the server
         info!("Initialization complete. Starting server...");
@@ -252,14 +254,27 @@ impl Aggregator {
     }
 
     // Process operator responses
-    async fn process_operator_response(
+    async fn queue_operator_response(
         mut rx: mpsc::Receiver<OperatorResponse>,
-        operator_responses: OperatorResponsesByTaskId,
-    ) {
+        operator_responses: Arc<OperatorResponsesByTaskId>,
+    ) -> Result<(), AggregatorError> {
         while let Some(response) = rx.recv().await {
-            info!("Received response: {:?}", response);
-            // TODO: Implement consensus checking and task status update logic
+            let operator_address = response
+                .signature
+                .recover_address_from_msg(response.result.as_bytes())
+                .map_err(|e| AggregatorError::SignatureError(e.to_string()))?;
+
+            info!(
+                "Received response from operator: {:?} for task: {:?}",
+                operator_address, response.task_id
+            );
+            operator_responses
+                .entry(response.task_id)
+                .or_insert_with(DashMap::new)
+                .insert(operator_address, response);
         }
+
+        Ok(())
     }
 }
 

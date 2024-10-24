@@ -58,9 +58,9 @@ impl IntoResponse for ServerError {
 // Struct to represent an operator's response to a task
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct OperatorResponse {
-    task_id: FixedBytes<32>,
-    result: String,
-    signature: Signature,
+    pub task_id: FixedBytes<32>,
+    pub result: String,
+    pub signature: Signature,
 }
 
 // Application state shared across request handlers
