@@ -76,7 +76,7 @@ pub async fn run_server(app_state: AppState) -> Result<(), ServerError> {
     let app = Router::new()
         .route("/task_status/:task_id", get(handle_task_status))
         .route("/submit_task", post(handle_submit_task))
-        .with_state(app_state);
+        .with_state(Arc::new(app_state));
 
     let listener = TcpListener::bind("0.0.0.0:8080")
         .await
@@ -90,7 +90,7 @@ pub async fn run_server(app_state: AppState) -> Result<(), ServerError> {
 
 // Handler for GET /task_status/:task_id endpoint
 async fn handle_task_status(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(task_id): Path<FixedBytes<32>>,
 ) -> Result<Json<TaskStatus>, ServerError> {
     let task_status = {
@@ -107,7 +107,7 @@ async fn handle_task_status(
 
 // Handler for POST /submit_task endpoint
 async fn handle_submit_task(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(operator_response): Json<OperatorResponse>,
 ) -> Result<StatusCode, ServerError> {
     // Verify the signature and check if it came from a valid operator
