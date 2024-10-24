@@ -10,6 +10,7 @@ alloy-primitives = "0.8.7"
 axum = "0.7.7"
 axum-macros = "0.4.0"
 contract-bindings = { path = "../contract-bindings" }
+dashmap = "6.1.0"
 dotenv = "0.15"
 eigen-crypto-bls = "0.1.0"
 eyre = "0.6.12"

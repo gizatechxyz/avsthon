@@ -1,5 +1,3 @@
-use std::{collections::HashMap, sync::Arc};
-
 use alloy_primitives::{Address, FixedBytes, Signature};
 use axum::{
     extract::{Path, State},
@@ -9,10 +7,12 @@ use axum::{
     Json, Router,
 };
 use contract_bindings::TaskStatus;
+use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::Arc;
 use thiserror::Error;
-use tokio::{net::TcpListener, sync::RwLock};
+use tokio::net::TcpListener;
 use tracing::{error, info};
 
 // Custom error type for server-related errors
@@ -66,8 +66,8 @@ pub struct OperatorResponse {
 // Application state shared across request handlers
 #[derive(Clone)]
 pub struct AppState {
-    pub operator_list: Arc<RwLock<Vec<Address>>>,
-    pub tasks: Arc<RwLock<HashMap<FixedBytes<32>, TaskStatus>>>,
+    pub operator_list: Arc<DashMap<Address, ()>>,
+    pub tasks: Arc<DashMap<FixedBytes<32>, TaskStatus>>,
     pub sender: tokio::sync::mpsc::Sender<OperatorResponse>,
 }
 
@@ -93,13 +93,12 @@ async fn handle_task_status(
     State(state): State<Arc<AppState>>,
     Path(task_id): Path<FixedBytes<32>>,
 ) -> Result<Json<TaskStatus>, ServerError> {
-    let task_status = {
-        let tasks_read = state.tasks.read().await;
-        tasks_read
-            .get(&task_id)
-            .cloned()
-            .unwrap_or(TaskStatus::EMPTY)
-    };
+    let task_status = state
+        .tasks
+        .get(&task_id)
+        .as_deref()
+        .cloned()
+        .unwrap_or(TaskStatus::EMPTY);
 
     info!("Served task status for {:?}", task_id);
     Ok(Json(task_status))
@@ -116,17 +115,15 @@ async fn handle_submit_task(
         .recover_address_from_msg(&operator_response.result)
         .map_err(|_| ServerError::InvalidSignature)?;
 
-    {
-        let operator_list = state.operator_list.read().await;
-        if !operator_list.contains(&recover_address) {
-            return Err(ServerError::InvalidOperator);
-        }
+    if !state.operator_list.contains_key(&recover_address) {
+        return Err(ServerError::InvalidOperator);
     }
 
-    let task_status = {
-        let tasks = state.tasks.read().await;
-        tasks.get(&operator_response.task_id).cloned()
-    };
+    let task_status = state
+        .tasks
+        .get(&operator_response.task_id)
+        .as_deref()
+        .cloned();
 
     match task_status {
         Some(status) if status == TaskStatus::EMPTY => {

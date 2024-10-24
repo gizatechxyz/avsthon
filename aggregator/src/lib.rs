@@ -18,12 +18,13 @@ use contract_bindings::{
     TaskRegistry::TaskRegistryInstance, TaskStatus, AVS_DIRECTORY_ADDRESS, GIZA_AVS_ADDRESS,
     TASK_REGISTRY_ADDRESS,
 };
+use dashmap::DashMap;
 use eyre::Result;
 use futures::StreamExt;
 use server::{AppState, OperatorResponse};
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tracing::{error, info};
 
 pub mod aggregator_config;
@@ -60,11 +61,14 @@ pub type HttpProviderWithSigner = Arc<
     >,
 >;
 
+type OperatorResponsesByTaskId = DashMap<FixedBytes<32>, DashMap<Address, OperatorResponse>>;
+
 // Main Aggregator struct representing the core functionality
 pub struct Aggregator {
     aggregator_address: Address,
-    operator_list: Arc<RwLock<Vec<Address>>>,
-    tasks: Arc<RwLock<HashMap<FixedBytes<32>, TaskStatus>>>,
+    operator_list: Arc<DashMap<Address, ()>>,
+    tasks: Arc<DashMap<FixedBytes<32>, TaskStatus>>,
+    operator_responses: OperatorResponsesByTaskId,
     http_provider: HttpProviderWithSigner,
     pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
     ecdsa_signer: PrivateKeySigner,
@@ -103,8 +107,9 @@ impl Aggregator {
 
         Ok(Self {
             aggregator_address,
-            operator_list: Arc::new(RwLock::new(vec![])),
-            tasks: Arc::new(RwLock::new(HashMap::new())),
+            operator_list: Arc::new(DashMap::new()),
+            tasks: Arc::new(DashMap::new()),
+            operator_responses: DashMap::new(),
             http_provider,
             pubsub_provider,
             ecdsa_signer,
@@ -112,20 +117,16 @@ impl Aggregator {
     }
 
     // Main run function to start the Aggregator
-    pub async fn run(&self) -> Result<(), AggregatorError> {
+    pub async fn run(&mut self) -> Result<(), AggregatorError> {
         // Fetch and update operator list
-        {
-            let fetched_operators = self.fetch_operator_list().await?;
-            let mut operator_list = self.operator_list.write().await;
-            *operator_list = fetched_operators;
-        } // operator_list write lock is released here
+        let fetched_operators = self.fetch_operator_list().await?;
+        self.operator_list.clear();
+        for operator in fetched_operators {
+            self.operator_list.insert(operator, ());
+        }
 
         // Fetch and update task history
-        {
-            let fetched_tasks = self.fetch_task_history().await?;
-            let mut tasks = self.tasks.write().await;
-            *tasks = fetched_tasks;
-        } // tasks write lock is released here
+        self.tasks = Arc::new(self.fetch_task_history().await?);
 
         // Spawn the task listener
         let tasks = self.tasks.clone();
@@ -138,7 +139,8 @@ impl Aggregator {
 
         // Create a channel to process operator responses
         let (tx, rx) = mpsc::channel::<OperatorResponse>(100);
-        tokio::spawn(Self::process_operator_response(rx));
+        let operator_responses = self.operator_responses.clone();
+        // tokio::spawn(Self::process_operator_response(rx, operator_responses));
 
         // Start the server
         info!("Initialization complete. Starting server...");
@@ -191,7 +193,7 @@ impl Aggregator {
     // Fetch the history of tasks
     async fn fetch_task_history(
         &self,
-    ) -> Result<HashMap<FixedBytes<32>, TaskStatus>, AggregatorError> {
+    ) -> Result<DashMap<FixedBytes<32>, TaskStatus>, AggregatorError> {
         info!("Fetching task history");
         let task_registry =
             TaskRegistryInstance::new(TASK_REGISTRY_ADDRESS, self.http_provider.clone());
@@ -206,7 +208,7 @@ impl Aggregator {
             .map(|(task_id, _)| task_id.taskId)
             .collect::<Vec<_>>();
 
-        let mut tasks = HashMap::new();
+        let tasks = DashMap::new();
         for task in task_list {
             let task_status = task_registry
                 .tasks(task)
@@ -222,7 +224,7 @@ impl Aggregator {
 
     // Listen for new tasks and update the task list
     async fn listen_for_task(
-        tasks: Arc<RwLock<HashMap<FixedBytes<32>, TaskStatus>>>,
+        tasks: Arc<DashMap<FixedBytes<32>, TaskStatus>>,
         pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
     ) -> Result<(), AggregatorError> {
         let task_registry = TaskRegistryInstance::new(TASK_REGISTRY_ADDRESS, pubsub_provider);
@@ -239,9 +241,8 @@ impl Aggregator {
         while let Some(log) = stream.next().await {
             match log {
                 Ok(event) => {
-                    let mut tasks = tasks.write().await;
-                    tasks.insert(event.0.taskId.clone(), TaskStatus::PENDING);
-                    info!("New task received: {:?}", event.0.taskId);
+                    tasks.insert(event.0.taskId, TaskStatus::PENDING);
+                    info!("New task detected: {:?}", event.0.taskId);
                 }
                 Err(e) => error!("Error receiving event: {:?}", e),
             }
@@ -251,10 +252,18 @@ impl Aggregator {
     }
 
     // Process operator responses
-    async fn process_operator_response(mut rx: mpsc::Receiver<OperatorResponse>) {
+    async fn process_operator_response(
+        mut rx: mpsc::Receiver<OperatorResponse>,
+        operator_responses: OperatorResponsesByTaskId,
+    ) {
         while let Some(response) = rx.recv().await {
             info!("Received response: {:?}", response);
-            // TODO: Implement response processing logic
+            // TODO: Implement consensus checking and task status update logic
         }
     }
 }
+
+// We want 100% consensus, so we need to wait for all the operators response
+// Once tasks are coming we need to store them in a queue (maybe hashmap) and wait for all the operators to respond
+// Once we get all the responses we can process the task and update the task status if there is consensus we update to completed if not we set to failed
+// Figure out how to handle the data type and structure of the task queue and how to process them while waiting for getting all the responses

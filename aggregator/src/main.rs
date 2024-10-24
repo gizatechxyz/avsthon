@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     // Initialize tracing
     init_tracing();
 
-    let aggregator = Aggregator::new().await?;
+    let mut aggregator = Aggregator::new().await?;
     aggregator.run().await?;
 
     // Keep the main thread running
