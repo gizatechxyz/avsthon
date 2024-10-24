@@ -30,11 +30,13 @@ use futures::StreamExt;
 use operator_config::OperatorConfig;
 use reqwest::Client as HttpClient;
 use serde::Serialize;
+use std::time::Duration;
 use std::{str::FromStr, sync::Arc};
 use tokio::{
     self,
     sync::mpsc::{self, Receiver, Sender},
     task::JoinHandle,
+    time::sleep,
 };
 use tracing::{error, info, warn};
 
@@ -390,17 +392,36 @@ impl Operator {
                         signature: signed_result,
                     };
 
-                    // Send the response to the aggregator
+                    // Send the response to the aggregator with retry logic
                     let submit_url = format!("{}/submit_task", self.aggregator_url);
-                    match http_client.post(&submit_url).json(&response).send().await {
-                        Ok(res) => {
-                            if res.status().is_success() {
-                                info!("Successfully submitted task result to aggregator");
-                            } else {
-                                error!("Failed to submit task result. Status: {}", res.status());
+                    let mut retry_count = 0;
+                    const MAX_RETRIES: u32 = 3;
+
+                    loop {
+                        match http_client.post(&submit_url).json(&response).send().await {
+                            Ok(res) => {
+                                if res.status().is_success() {
+                                    info!("Successfully submitted task result to aggregator");
+                                    break;
+                                } else if res.status() == reqwest::StatusCode::NOT_FOUND
+                                    && retry_count < MAX_RETRIES
+                                {
+                                    retry_count += 1;
+                                    warn!("Received 404 error. Retrying in 1 second... (Attempt {}/{})", retry_count, MAX_RETRIES);
+                                    sleep(Duration::from_secs(1)).await;
+                                } else {
+                                    error!(
+                                        "Failed to submit task result. Status: {}",
+                                        res.status()
+                                    );
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                error!("Error submitting task result: {:?}", e);
+                                break;
                             }
                         }
-                        Err(e) => error!("Error submitting task result: {:?}", e),
                     }
                 }
                 Err(e) => error!("Error processing task: {:?}", e),
