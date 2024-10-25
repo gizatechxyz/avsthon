@@ -20,7 +20,7 @@ contract DeployContracts is Script, Constants {
 
         // Deploy contracts
         clientAppRegistry = new ClientAppRegistry(msg.sender);
-        taskRegistry = new TaskRegistry(msg.sender, AGGREGATOR_NODE, address(clientAppRegistry));
+        taskRegistry = new TaskRegistry(msg.sender, HOLESKY_AGGREGATOR_NODE, address(clientAppRegistry));
         gizaAvs = new GizaAvs(msg.sender, HOLESKY_EIGENLAYER_AVS_DIRECTORY, address(clientAppRegistry));
 
         console2.log("ClientAppRegistry deployed at %s", address(clientAppRegistry));

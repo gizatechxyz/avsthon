@@ -10,7 +10,7 @@ contract TaskRegistry is Ownable {
     //////////////////////////////////////////////////////////////*/
 
     event TaskRequested(bytes32 indexed taskId, TaskRequest taskRequest);
-    event TaskResponded(bytes32 indexed taskId, TaskStatus status);
+    event TaskResponded(bytes32 indexed taskId, TaskStatus status, uint256 taskResult);
 
     /*//////////////////////////////////////////////////////////////
                               ERROR
@@ -78,7 +78,7 @@ contract TaskRegistry is Ownable {
         emit TaskRequested(taskId, taskRequest);
     }
 
-    function respondToTask(bytes32 taskId, TaskStatus status) external onlyAggregatorNode {
+    function respondToTask(bytes32 taskId, TaskStatus status, uint256 taskResult) external onlyAggregatorNode {
         // Check that status is only Completed or Failed
         if (status == TaskStatus.EMPTY || status == TaskStatus.PENDING) revert InvalidTaskOperation();
 
@@ -86,7 +86,7 @@ contract TaskRegistry is Ownable {
         if (tasks[taskId] != TaskStatus.PENDING) revert InvalidTaskOperation();
 
         tasks[taskId] = status;
-        emit TaskResponded(taskId, status);
+        emit TaskResponded(taskId, status, taskResult);
     }
 
     /*//////////////////////////////////////////////////////////////

@@ -74,6 +74,17 @@ impl From<u8> for TaskStatus {
     }
 }
 
+impl From<TaskStatus> for u8 {
+    fn from(status: TaskStatus) -> Self {
+        match status {
+            TaskStatus::EMPTY => 0,
+            TaskStatus::PENDING => 1,
+            TaskStatus::COMPLETED => 2,
+            TaskStatus::FAILED => 3,
+        }
+    }
+}
+
 sol!(
     #[sol(rpc)]
     ClientAppRegistry,

@@ -9,7 +9,6 @@ use alloy::{
         Identity, IpcConnect, ProviderBuilder, RootProvider,
     },
     pubsub::PubSubFrontend,
-    signers::local::PrivateKeySigner,
     transports::http::{Client, Http},
 };
 use alloy_primitives::{Address, FixedBytes, U256};
@@ -45,6 +44,8 @@ pub enum AggregatorError {
     ServerError(String),
     #[error("Signature error: {0}")]
     SignatureError(String),
+    #[error("Tx error: {0}")]
+    TxError(String),
 }
 
 // Type alias for the complex provider type to improve readability
@@ -65,15 +66,26 @@ pub type HttpProviderWithSigner = Arc<
 
 type OperatorResponsesByTaskId = DashMap<FixedBytes<32>, DashMap<Address, OperatorResponse>>;
 
+#[derive(Debug, Clone)]
+struct AggregatedResponse {
+    task_id: FixedBytes<32>,
+    responses: DashMap<Address, OperatorResponse>,
+}
+
+#[derive(Debug, Clone)]
+struct TaskResult {
+    task_id: FixedBytes<32>,
+    status: TaskStatus,
+    result: U256,
+}
+
 // Main Aggregator struct representing the core functionality
 pub struct Aggregator {
-    aggregator_address: Address,
     operator_list: Arc<DashMap<Address, ()>>,
     tasks: Arc<DashMap<FixedBytes<32>, TaskStatus>>,
     operator_responses: Arc<OperatorResponsesByTaskId>,
     http_provider: HttpProviderWithSigner,
     pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
-    ecdsa_signer: PrivateKeySigner,
 }
 
 impl Aggregator {
@@ -82,7 +94,6 @@ impl Aggregator {
         let config = AggregatorConfig::from_env();
 
         let ecdsa_signer = config.ecdsa_signer;
-        let aggregator_address = ecdsa_signer.address();
         let wallet = EthereumWallet::from(ecdsa_signer.clone());
 
         // Create HttpProvider
@@ -108,13 +119,11 @@ impl Aggregator {
         );
 
         Ok(Self {
-            aggregator_address,
             operator_list: Arc::new(DashMap::new()),
             tasks: Arc::new(DashMap::new()),
             operator_responses: Arc::new(DashMap::new()),
             http_provider,
             pubsub_provider,
-            ecdsa_signer,
         })
     }
 
@@ -139,17 +148,42 @@ impl Aggregator {
             }
         });
 
-        // Create a channel to process operator responses
-        let (tx, rx) = mpsc::channel::<OperatorResponse>(100);
+        // Create channels for operator responses and task processing
+        let (tx_response, rx_response) = mpsc::channel::<OperatorResponse>(100);
+        let (tx_aggregated_response, rx_aggregated_response) =
+            mpsc::channel::<AggregatedResponse>(100);
+        let (tx_task_process, rx_task_process) = mpsc::channel::<TaskResult>(100);
         let operator_responses = self.operator_responses.clone();
-        tokio::spawn(Self::queue_operator_response(rx, operator_responses));
+        let operator_list = self.operator_list.clone();
+        let tasks = self.tasks.clone();
+
+        // Spawn the operator response queue processor
+        tokio::spawn(Self::queue_operator_response(
+            rx_response,
+            operator_responses.clone(),
+            tx_aggregated_response,
+            operator_list.clone(),
+        ));
+
+        // Spawn the task processor
+        tokio::spawn(Self::process_completed_tasks(
+            rx_aggregated_response,
+            tx_task_process,
+            tasks,
+        ));
+
+        // Spawn the task result sender
+        tokio::spawn(Self::send_task_result(
+            rx_task_process,
+            self.http_provider.clone(),
+        ));
 
         // Start the server
         info!("Initialization complete. Starting server...");
         let app_state = AppState {
             operator_list: self.operator_list.clone(),
             tasks: self.tasks.clone(),
-            sender: tx,
+            sender: tx_response,
         };
 
         server::run_server(app_state)
@@ -257,6 +291,8 @@ impl Aggregator {
     async fn queue_operator_response(
         mut rx: mpsc::Receiver<OperatorResponse>,
         operator_responses: Arc<OperatorResponsesByTaskId>,
+        tx_aggregated_response: mpsc::Sender<AggregatedResponse>,
+        operator_list: Arc<DashMap<Address, ()>>,
     ) -> Result<(), AggregatorError> {
         while let Some(response) = rx.recv().await {
             let operator_address = response
@@ -265,20 +301,98 @@ impl Aggregator {
                 .map_err(|e| AggregatorError::SignatureError(e.to_string()))?;
 
             info!(
-                "Received response from operator: {:?} for task: {:?}",
+                "Aggregating response from operator: {:?} for task: {:?}",
                 operator_address, response.task_id
             );
+
             operator_responses
-                .entry(response.task_id)
+                .entry(response.clone().task_id)
                 .or_insert_with(DashMap::new)
-                .insert(operator_address, response);
+                .insert(operator_address, response.clone());
+
+            // For AVSthon we wait for full operator responses
+            // Once hashmap is full we process the task
+            let operator_length = operator_list.len();
+            if operator_responses.get(&response.task_id).unwrap().len() == operator_length {
+                let aggregated_response = AggregatedResponse {
+                    task_id: response.task_id,
+                    responses: operator_responses.get(&response.task_id).unwrap().clone(),
+                };
+                match tx_aggregated_response.send(aggregated_response).await {
+                    Ok(_) => (),
+                    Err(e) => error!("Error sending aggregated response: {:?}", e),
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn process_completed_tasks(
+        mut rx: mpsc::Receiver<AggregatedResponse>,
+        tx_task_process: mpsc::Sender<TaskResult>,
+        tasks: Arc<DashMap<FixedBytes<32>, TaskStatus>>,
+    ) {
+        while let Some(aggregated_response) = rx.recv().await {
+            let task_id = aggregated_response.task_id;
+            let extracted_result = aggregated_response
+                .responses
+                .iter()
+                .map(|entry| entry.value().result.trim().to_string())
+                .collect::<Vec<String>>()
+                .iter()
+                .map(|result| result.parse().unwrap())
+                .collect::<Vec<U256>>();
+
+            // Check if all values in the array are equal
+            let (task_status, consensus_result) =
+                if extracted_result.iter().all(|&x| x == extracted_result[0]) {
+                    info!("Consensus reached for task: {:?}", task_id);
+                    (TaskStatus::COMPLETED, extracted_result[0])
+                } else {
+                    info!("Consensus not reached for task: {:?}", task_id);
+                    (TaskStatus::FAILED, U256::ZERO)
+                };
+
+            match tx_task_process
+                .send(TaskResult {
+                    task_id,
+                    status: task_status.clone(),
+                    result: consensus_result,
+                })
+                .await
+            {
+                Ok(_) => (),
+                Err(e) => error!("Failed to send consensus result: {:?}", e),
+            }
+
+            tasks.insert(task_id, task_status);
+        }
+    }
+
+    async fn send_task_result(
+        mut rx: mpsc::Receiver<TaskResult>,
+        http_provider: HttpProviderWithSigner,
+    ) -> Result<(), AggregatorError> {
+        let task_registry = TaskRegistryInstance::new(TASK_REGISTRY_ADDRESS, http_provider);
+
+        while let Some(task_result) = rx.recv().await {
+            let tx = task_registry
+                .respondToTask(
+                    task_result.task_id,
+                    task_result.status.into(),
+                    task_result.result,
+                )
+                .send()
+                .await
+                .map_err(|e| AggregatorError::TxError(e.to_string()))?
+                .watch()
+                .await
+                .map_err(|e| AggregatorError::TxError(e.to_string()))?;
+
+            info!("Task result sent tx hash: {:?}", tx);
         }
 
         Ok(())
     }
 }
-
-// We want 100% consensus, so we need to wait for all the operators response
-// Once tasks are coming we need to store them in a queue (maybe hashmap) and wait for all the operators to respond
-// Once we get all the responses we can process the task and update the task status if there is consensus we update to completed if not we set to failed
-// Figure out how to handle the data type and structure of the task queue and how to process them while waiting for getting all the responses

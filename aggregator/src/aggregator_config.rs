@@ -1,6 +1,5 @@
 use alloy::signers::local::PrivateKeySigner;
 use dotenv::dotenv;
-use std::env;
 
 #[derive(Debug)]
 pub struct AggregatorConfig {
