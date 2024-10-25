@@ -76,9 +76,9 @@ pub struct Operator {
 }
 
 impl Operator {
-    pub async fn new() -> Result<Self> {
+    pub async fn new(private_key: &str) -> Result<Self> {
         // Load operator configuration
-        let config = OperatorConfig::from_env();
+        let config = OperatorConfig::from_env(private_key);
 
         let ecdsa_signer = config.ecdsa_signer;
         let operator_address = ecdsa_signer.address();

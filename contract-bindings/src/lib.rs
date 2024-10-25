@@ -15,11 +15,11 @@ use alloy::sol;
 use alloy_primitives::{address, Address};
 use serde::Serialize;
 
-pub const TASK_REGISTRY_ADDRESS: Address = address!("6Da3D07a6BF01F02fB41c02984a49B5d9Aa6ea92");
+pub const TASK_REGISTRY_ADDRESS: Address = address!("a68E430060f74F9821D2dC9A9E2CE3aF7d842EBe");
 pub const CLIENT_APP_REGISTRY_ADDRESS: Address =
-    address!("a8d297D643a11cE83b432e87eEBce6bee0fd2bAb");
+    address!("B2ff9d5e60d68A52cea3cd041b32f1390A880365");
 pub const AVS_DIRECTORY_ADDRESS: Address = address!("055733000064333CaDDbC92763c58BF0192fFeBf");
-pub const GIZA_AVS_ADDRESS: Address = address!("68d2Ecd85bDEbfFd075Fb6D87fFD829AD025DD5C");
+pub const GIZA_AVS_ADDRESS: Address = address!("8B64968F69E669faCc86FA3484FD946f1bBE7c91");
 pub const OPERATOR_UJI_ADDRESS: Address = address!("37893031A8484066232AcBE6bFe7E2a7A4411a7d");
 
 sol!(

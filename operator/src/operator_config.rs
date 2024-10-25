@@ -44,16 +44,15 @@ impl OperatorConfig {
     /// let config = OperatorConfig::from_env();
     /// println!("Docker socket path: {}", config.docker_sock_path);
     /// ```
-    pub(super) fn from_env() -> Self {
+    pub(super) fn from_env(private_key: &str) -> Self {
         // Load environment variables from .env file if present
         dotenv().ok();
 
         let docker_sock_path = Self::get_docker_sock_path();
 
-        let ecdsa_signer: PrivateKeySigner =
-            "2a7f875389f0ce57b6d3200fb88e9a95e864a2ff589e8b1b11e56faff32a1fc5"
-                .parse()
-                .expect("Failed to parse ECDSA private key");
+        let ecdsa_signer: PrivateKeySigner = private_key
+            .parse()
+            .expect("Failed to parse ECDSA private key");
 
         let aggregator_url = "http://0.0.0.0:8080".to_string();
 
