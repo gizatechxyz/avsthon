@@ -2802,6 +2802,7 @@ dependencies = [
  "eigen-crypto-bls",
  "eyre",
  "futures",
+ "rand",
  "regex",
  "reqwest",
  "serde",

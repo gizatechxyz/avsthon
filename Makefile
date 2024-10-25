@@ -44,6 +44,12 @@ __TASKS__: ##
 create-task: ## create a task (you need to run anvil first in a separate terminal and the contract deployed)
 	cast send $(TASK_REGISTRY_ADDRESS)  "createTask(bytes32)" $(TASK_ID) --private-key $(DEPLOYER_PK) --rpc-url $(ANVIL_RPC_URL)
 
+spawn-task: ## spawn a task (you need to run anvil first in a separate terminal and the contract deployed)
+	@bash -c 'while true; do \
+		cast send $(TASK_REGISTRY_ADDRESS) "createTask(bytes32)" $(TASK_ID) --private-key $(DEPLOYER_PK) --rpc-url $(ANVIL_RPC_URL); \
+		echo "Waiting 5 seconds before creating next task..."; \
+		sleep 5; \
+	done'
 __OPERATOR__: ##
 run-operator-uji: ## run the operator
 	cd operator && cargo run -- $(OPERATOR_UJI_PK)

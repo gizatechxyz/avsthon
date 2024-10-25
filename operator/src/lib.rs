@@ -28,6 +28,7 @@ use docker_client::DockerClient;
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
 use operator_config::OperatorConfig;
+use rand::Rng;
 use reqwest::Client as HttpClient;
 use serde::Serialize;
 use std::time::Duration;
@@ -397,6 +398,9 @@ impl Operator {
                     let mut retry_count = 0;
                     const MAX_RETRIES: u32 = 3;
 
+                    // Introduce random latency between 0 and 3 seconds
+                    let random_delay = rand::thread_rng().gen_range(0..=3000);
+                    sleep(Duration::from_millis(random_delay)).await;
                     loop {
                         match http_client.post(&submit_url).json(&response).send().await {
                             Ok(res) => {
