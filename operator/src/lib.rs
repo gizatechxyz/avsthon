@@ -112,7 +112,7 @@ impl Operator {
             API_DEFAULT_VERSION,
         )?);
 
-        let docker = DockerClient::new(docker_connection);
+        let docker = DockerClient::new(docker_connection, operator_address.to_string());
 
         Ok(Self {
             operator_address,
