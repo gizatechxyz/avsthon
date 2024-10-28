@@ -29,25 +29,25 @@ For the AVSthon, we have simplified the main components of the Giza protocol to 
 
 1. **Giza AVS** 
    
-   - [GizaAvs](./contracts/src/GizaAvs.sol): Implements simplified operator registration to the AVS.
+   - [GizaAvs](./contracts/src/GizaAvs.sol): Implements simplified Operator registration to the AVS.
    - [ClientAppRegistry](./contracts/src/ClientAppRegistry.sol): Handles registration of client applications.
-   - [TaskRegistry](./contracts/src/TaskRegistry.sol): Manages task registration and operator execution requests.
+   - [TaskRegistry](./contracts/src/TaskRegistry.sol): Manages task registration and Operator execution requests.
 2. **Demo-App**
    
    - [DemoApp](./app/src/main.rs): A simple Rust executable that fetches the latest Ethereum block, packaged as a Docker image.
 3. **Operator**
    
-   - [Operator](./operator/src/main.rs): A Rust executable that monitors requested tasks, retrieves tasks from Docker images, executes them, and forwards results to the aggregator node.
+   - [Operator](./operator/src/main.rs): A Rust executable that monitors requested tasks, retrieves tasks from Docker images, executes them, and forwards results to the Aggregator node.
 4. **Aggregator**
    
-   - [Aggregator](./aggregator/src/main.rs): A Rust executable that processes operator results, verifies signatures, performs consensus validation, and broadcasts results to the `TaskRegistry`.
+   - [Aggregator](./aggregator/src/main.rs): A Rust executable that processes Operator results, verifies signatures, performs consensus validation, and broadcasts results to the `TaskRegistry`.
 
 ![Overview](./assets/overview.png)
 
 ## Operator Registration
 
 Two operators run on this AVS, both registered on Eigenlayer ([Operator 1](https://holesky.eigenlayer.xyz/operator/0x37893031A8484066232AcBE6bFe7E2a7A4411a7d) and [Operator 2](https://holesky.eigenlayer.xyz/operator/0x76cCAf70489a039947Fe104fe3Cc990f4270Aa5F)).
-After Eigenlayer registration, operators can register with GizaAVS using the `registerOperator` function. Once registered, operators can opt-in to run the `DemoApp` by calling the `optInClientAppId` function.
+After Eigenlayer registration, Operators can register with GizaAVS using the `registerOperator` function. Once registered, Operators can opt-in to run the `DemoApp` by calling the `optInClientAppId` function.
 
 ```mermaid
 sequenceDiagram
@@ -65,7 +65,7 @@ sequenceDiagram
 
 When a task is requested, the `TaskRegistry` emits a `TaskRequested` event. 
 Operators monitor these events and execute tasks using the associated Docker image. 
-After execution, operators send signed results to the Aggregator, which waits for a quorum before verifying signatures and broadcasting consensus results to the `TaskRegistry`.
+After execution, Operators send signed results to the Aggregator, which waits for a quorum before verifying signatures and broadcasting consensus results to the `TaskRegistry`.
 
 ```mermaid
 sequenceDiagram
@@ -86,7 +86,7 @@ sequenceDiagram
 
 To maintain simplicity in this proof of concept while focusing on core off-chain/on-chain interactions, we simplified several components that will be enhanced in future iterations:
 
-- **Operator Registration**: Currently simplified to basic Eigenlayer registration. Future versions will implement a `RegistryCoordinator` to verify operator status before GizaAVS registration.
+- **Operator Registration**: Currently simplified to basic Eigenlayer registration. Future versions will implement a `RegistryCoordinator` to verify Operator status before GizaAVS registration.
   
 - **Operator Consensus**: Currently uses simple majority consensus. Future versions will implement more sophisticated consensus mechanisms for enhanced security.
   
@@ -120,10 +120,10 @@ A `Makefile` is provided for easy execution. Follow these steps in separate term
 1. Build contracts: `make build-contracts`
 2. Start local blockchain: `make anvil`
 3. Deploy contracts: `make deploy-contracts`
-4. Launch first operator: `make run-operator-uji`
-5. Launch second operator: `make run-operator-floki`
-6. Start aggregator: `make run-aggregator`
+4. Launch first Operator: `make run-operator-uji`
+5. Launch second Operator: `make run-operator-floki`
+6. Start Aggregator: `make run-aggregator`
 7. Create a test task: `make create-task`
 
-This setup creates multiple parallel processes: a local blockchain instance, two operator nodes, and an aggregator node. 
-Creating a task triggers the demo-app execution across operators.
+This setup creates multiple parallel processes: a local blockchain instance, two Operator nodes, and an Aggregator node. 
+Creating a task triggers the demo-app execution across Operators.
