@@ -1,23 +1,24 @@
 [package]
-name = "operator"
+name = "aggregator"
 version = "0.1.0"
 edition = "2021"
+
 
 [dependencies]
 alloy = { version = "0.4.2", features = ["full", "sol-types"] }
 alloy-primitives = "0.8.7"
-bollard = "0.17.1"
+axum = "0.7.7"
+axum-macros = "0.4.0"
 contract-bindings = { path = "../contract-bindings" }
-dirs = "5"
+dashmap = "6.1.0"
 dotenv = "0.15"
 eigen-crypto-bls = "0.1.0"
 eyre = "0.6.12"
 futures = "0.3"
-regex = "1.11.0"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = { version = "1.0" }
+serde_json = "1.0"
+thiserror = "1.0.65"
 time = { version = "0.3", features = ["macros"] }
 tokio = { version = "1.40", features = ["full", "rt-multi-thread", "sync"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter", "time"] }
-reqwest = { version = "0.12.8", features = ["json"] }

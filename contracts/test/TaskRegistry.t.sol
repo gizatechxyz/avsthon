@@ -89,7 +89,7 @@ contract TaskRegistryTest is TestState {
 
         vm.prank(aggregatorNode);
 
-        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.COMPLETED);
+        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.COMPLETED, 0);
     }
 
     function testRespondToTask_RevertWhen_NotAggregatorNode() public {
@@ -102,7 +102,7 @@ contract TaskRegistryTest is TestState {
 
         vm.prank(user);
         vm.expectRevert(Ownable.Unauthorized.selector);
-        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.COMPLETED);
+        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.COMPLETED, 0);
     }
 
     function testRespondToTask_RevertWhen_InvalidStatus() public {
@@ -115,11 +115,11 @@ contract TaskRegistryTest is TestState {
 
         vm.prank(aggregatorNode);
         vm.expectRevert(TaskRegistry.InvalidTaskOperation.selector);
-        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.EMPTY);
+        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.EMPTY, 0);
 
         vm.prank(aggregatorNode);
         vm.expectRevert(TaskRegistry.InvalidTaskOperation.selector);
-        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.PENDING);
+        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.PENDING, 0);
     }
 
     function testRespondToTask_RevertWhen_AlreadyRespondedCompleted() public {
@@ -131,11 +131,11 @@ contract TaskRegistryTest is TestState {
         bytes32 taskId = keccak256(abi.encode(user, appId, block.timestamp));
 
         vm.prank(aggregatorNode);
-        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.COMPLETED);
+        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.COMPLETED, 0);
 
         vm.prank(aggregatorNode);
         vm.expectRevert(TaskRegistry.InvalidTaskOperation.selector);
-        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.FAILED);
+        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.FAILED, 0);
     }
 
     function testRespondToTask_RevertWhen_AlreadyRespondedFailed() public {
@@ -147,10 +147,10 @@ contract TaskRegistryTest is TestState {
         bytes32 taskId = keccak256(abi.encode(user, appId, block.timestamp));
 
         vm.prank(aggregatorNode);
-        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.FAILED);
+        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.FAILED, 0);
 
         vm.prank(aggregatorNode);
         vm.expectRevert(TaskRegistry.InvalidTaskOperation.selector);
-        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.COMPLETED);
+        taskRegistry.respondToTask(taskId, TaskRegistry.TaskStatus.COMPLETED, 0);
     }
 }

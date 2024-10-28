@@ -1,7 +1,6 @@
 use alloy::signers::local::PrivateKeySigner;
 use dirs::home_dir;
 use dotenv::dotenv;
-use eigen_crypto_bls::BlsKeyPair;
 use std::env;
 
 /// `OperatorConfig` represents the configuration for the operator service.
@@ -9,7 +8,6 @@ use std::env;
 /// This struct holds the following configuration:
 /// - `docker_sock_path`: The path to the Docker socket file (docker.sock).
 /// - `ecdsa_signer`: The ECDSA signer for cryptographic operations.
-/// - `bls_key_pair`: The BLS key pair for cryptographic operations.
 ///
 /// The configuration is loaded from environment variables, with defaults based
 /// on the operating system (macOS/Linux). It optionally loads values from a
@@ -22,17 +20,14 @@ pub struct OperatorConfig {
     /// - Can be overridden by the `DOCKER_SOCK_PATH` environment variable.
     pub docker_sock_path: String,
 
+    /// The URL of the aggregator.
+    pub aggregator_url: String,
+
     /// The ECDSA signer used for cryptographic operations.
     /// - Currently initialized with a hardcoded private key.
     /// - In production, this should be securely loaded from an environment variable
     ///   or a secure key management system.
     pub ecdsa_signer: PrivateKeySigner,
-
-    /// The BLS key pair used for cryptographic operations.
-    /// - Currently initialized with a hardcoded private key.
-    /// - In production, this should be securely loaded from an environment variable
-    ///   or a secure key management system.
-    pub bls_key_pair: BlsKeyPair,
 }
 
 impl OperatorConfig {
@@ -60,16 +55,12 @@ impl OperatorConfig {
                 .parse()
                 .expect("Failed to parse ECDSA private key");
 
-        let bls_key_pair = BlsKeyPair::new(
-            "15880505367010957571607010372625037364073898331367922938497268604068798728927"
-                .to_string(),
-        )
-        .expect("Failed to build BLS Key Pair");
+        let aggregator_url = "http://0.0.0.0:8080".to_string();
 
         Self {
             docker_sock_path,
+            aggregator_url,
             ecdsa_signer,
-            bls_key_pair,
         }
     }
 

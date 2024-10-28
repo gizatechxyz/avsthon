@@ -11,10 +11,10 @@ use alloy::{
         Identity, IpcConnect, ProviderBuilder, RootProvider,
     },
     pubsub::PubSubFrontend,
-    signers::{local::PrivateKeySigner, Signer},
+    signers::{local::PrivateKeySigner, Signer, SignerSync},
     transports::http::{Client, Http},
 };
-use alloy_primitives::{Address, FixedBytes, U256};
+use alloy_primitives::{Address, FixedBytes, Signature, U256};
 use bollard::{Docker, API_DEFAULT_VERSION};
 use contract_bindings::{
     AVSDirectory::AVSDirectoryInstance,
@@ -25,15 +25,18 @@ use contract_bindings::{
     AVS_DIRECTORY_ADDRESS, CLIENT_APP_REGISTRY_ADDRESS, GIZA_AVS_ADDRESS, TASK_REGISTRY_ADDRESS,
 };
 use docker_client::DockerClient;
-use eigen_crypto_bls::BlsKeyPair;
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
 use operator_config::OperatorConfig;
+use reqwest::Client as HttpClient;
+use serde::Serialize;
+use std::time::Duration;
 use std::{str::FromStr, sync::Arc};
 use tokio::{
     self,
     sync::mpsc::{self, Receiver, Sender},
     task::JoinHandle,
+    time::sleep,
 };
 use tracing::{error, info, warn};
 
@@ -55,13 +58,20 @@ pub type HttpProviderWithSigner = Arc<
 // Adjust this based on your expected load and system resources
 const QUEUE_CAPACITY: usize = 100;
 
+#[derive(Serialize)]
+pub struct OperatorResponse {
+    task_id: FixedBytes<32>,
+    result: String,
+    signature: Signature,
+}
+
 #[derive(Clone)]
 pub struct Operator {
     operator_address: Address,
+    aggregator_url: String,
     pubsub_provider: Arc<RootProvider<PubSubFrontend>>,
     http_provider: HttpProviderWithSigner,
     ecdsa_signer: PrivateKeySigner,
-    bls_key_pair: BlsKeyPair,
     docker: DockerClient,
 }
 
@@ -109,8 +119,8 @@ impl Operator {
             pubsub_provider,
             http_provider,
             ecdsa_signer,
-            bls_key_pair: config.bls_key_pair,
             docker,
+            aggregator_url: config.aggregator_url,
         })
     }
 
@@ -335,9 +345,10 @@ impl Operator {
         Ok(())
     }
 
-    async fn process_tasks(self, mut rx: Receiver<TaskRegistry::TaskRequested>) {
+    async fn process_tasks(self, mut rx: Receiver<TaskRegistry::TaskRequested>) -> Result<()> {
         let client_app_registry =
             ClientAppRegistryInstance::new(CLIENT_APP_REGISTRY_ADDRESS, self.http_provider.clone());
+        let http_client = HttpClient::new();
 
         while let Some(task) = rx.recv().await {
             info!("Processing task: {:?}", task);
@@ -372,16 +383,57 @@ impl Operator {
             );
 
             match self.docker.run_image(&image_metadata).await {
-                Ok(result) => info!("Processed task: {:?}. Result: {:?}", task, result),
+                Ok(result) => {
+                    info!("Processed task: {:?}. Result: {:?}", task, result);
+                    let signed_result = self.ecdsa_signer.sign_message_sync(&result.as_bytes())?;
+                    let response = OperatorResponse {
+                        task_id: task.taskId,
+                        result,
+                        signature: signed_result,
+                    };
+
+                    // Send the response to the aggregator with retry logic
+                    let submit_url = format!("{}/submit_task", self.aggregator_url);
+                    let mut retry_count = 0;
+                    const MAX_RETRIES: u32 = 3;
+
+                    loop {
+                        match http_client.post(&submit_url).json(&response).send().await {
+                            Ok(res) => {
+                                if res.status().is_success() {
+                                    info!("Successfully submitted task result to aggregator");
+                                    break;
+                                } else if res.status() == reqwest::StatusCode::NOT_FOUND
+                                    && retry_count < MAX_RETRIES
+                                {
+                                    retry_count += 1;
+                                    warn!("Received 404 error. Retrying in 1 second... (Attempt {}/{})", retry_count, MAX_RETRIES);
+                                    sleep(Duration::from_secs(1)).await;
+                                } else {
+                                    error!(
+                                        "Failed to submit task result. Status: {}",
+                                        res.status()
+                                    );
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                error!("Error submitting task result: {:?}", e);
+                                break;
+                            }
+                        }
+                    }
+                }
                 Err(e) => error!("Error processing task: {:?}", e),
             }
         }
+        Ok(())
     }
 
     async fn handle_tasks(
         &self,
         event_listener: JoinHandle<Result<()>>,
-        task_processor: JoinHandle<()>,
+        task_processor: JoinHandle<Result<()>>,
     ) -> Result<()> {
         tokio::select! {
             event_result = event_listener => {

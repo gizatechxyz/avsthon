@@ -13,6 +13,7 @@
 
 use alloy::sol;
 use alloy_primitives::{address, Address};
+use serde::Serialize;
 
 pub const TASK_REGISTRY_ADDRESS: Address = address!("6Da3D07a6BF01F02fB41c02984a49B5d9Aa6ea92");
 pub const CLIENT_APP_REGISTRY_ADDRESS: Address =
@@ -53,6 +54,37 @@ impl std::fmt::Debug for ClientAppRegistry::ClientAppMetadata {
     }
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub enum TaskStatus {
+    EMPTY,
+    PENDING,
+    COMPLETED,
+    FAILED,
+}
+
+impl From<u8> for TaskStatus {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => TaskStatus::EMPTY,
+            1 => TaskStatus::PENDING,
+            2 => TaskStatus::COMPLETED,
+            3 => TaskStatus::FAILED,
+            _ => TaskStatus::EMPTY,
+        }
+    }
+}
+
+impl From<TaskStatus> for u8 {
+    fn from(status: TaskStatus) -> Self {
+        match status {
+            TaskStatus::EMPTY => 0,
+            TaskStatus::PENDING => 1,
+            TaskStatus::COMPLETED => 2,
+            TaskStatus::FAILED => 3,
+        }
+    }
+}
+
 sol!(
     #[sol(rpc)]
     ClientAppRegistry,
@@ -69,6 +101,7 @@ sol! {
     #[sol(rpc)]
     interface AVSDirectory {
     function calculateOperatorAVSRegistrationDigestHash(address operator, address avs, bytes32 salt, uint256 expiry) external view returns (bytes32);
+    function avsOperatorStatus(address avs,address operator) external view returns (uint256);
 }}
 
 #[cfg(test)]
