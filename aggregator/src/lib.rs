@@ -20,10 +20,13 @@ use contract_bindings::{
 use dashmap::DashMap;
 use eyre::Result;
 use futures::StreamExt;
+use rand::Rng;
 use server::{AppState, OperatorResponse};
 use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 use tokio::sync::mpsc;
+use tokio::time::sleep;
 use tracing::{error, info};
 
 pub mod aggregator_config;
@@ -389,6 +392,9 @@ impl Aggregator {
                 .watch()
                 .await
                 .map_err(|e| AggregatorError::TxError(e.to_string()))?;
+
+            let random_delay = rand::thread_rng().gen_range(0..=3000);
+            sleep(Duration::from_millis(random_delay)).await;
 
             info!("Task result sent tx hash: {:?}", tx);
         }

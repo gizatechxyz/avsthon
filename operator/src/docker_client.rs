@@ -22,6 +22,8 @@ pub struct DockerImageMetadata {
 pub(super) struct DockerClient {
     /// The underlying `Docker` client, wrapped in an `Arc` for shared ownership across threads.
     docker: Arc<Docker>,
+    /// The machine ID of the Docker client (Here it is eth addressof the operator)
+    machine_id: String,
 }
 
 impl DockerClient {
@@ -32,8 +34,8 @@ impl DockerClient {
     ///
     /// # Returns
     /// A new instance of `DockerClient`.
-    pub fn new(docker: Arc<Docker>) -> Self {
-        Self { docker }
+    pub fn new(docker: Arc<Docker>, machine_id: String) -> Self {
+        Self { docker, machine_id }
     }
 
     /// Pulls a Docker image from the repository and tag specified in the `DockerImageMetadata`.
@@ -103,7 +105,7 @@ impl DockerClient {
     pub async fn run_image(&self, metadata: &DockerImageMetadata) -> Result<String> {
         // Create a container from the image
         let container_opts = CreateContainerOptions {
-            name: "test",
+            name: format!("test-{}", self.machine_id),
             ..Default::default()
         };
 
