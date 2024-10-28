@@ -10,10 +10,10 @@ Traditional smart contract-based automation, constrained by blockchain throughpu
 
 *Enter Giza Agents*
 
-Giza Agents address these challenges by providing verifiable automation of complex processes, enabling 24/7 monitoring and execution, and making Web3 more accessible, efficient, and engaging.
+Giza Agents address these challenges by providing trustless automation of complex processes, enabling 24/7 monitoring and execution, and making Web3 more accessible, efficient, and engaging.
 
 These autonomous software entities execute complex strategies, interact with multiple blockchain protocols, and make intelligent decisions based on real-time data and predefined algorithms. 
-They can be customized for various use cases, from optimizing DeFi strategies to managing cross-chain operations, while maintaining transparency and verifiability.
+They can be customized for various use cases, from optimizing DeFi strategies to managing cross-chain operations, while maintaining transparency and trustlessness.
 
 # Building Giza as an AVS
 
