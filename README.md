@@ -38,7 +38,7 @@ For the AVSthon, we have simplified the main components of the Giza protocol to 
    - [DemoApp](./app/src/main.rs): A simple Rust executable that fetches the latest Ethereum block, packaged as a Docker image.
 3. **Operator**
    
-   - [Operator](./operator/src/main.rs): A Rust executable that monitors requested tasks, retrieves tasks from Docker images, executes them, and forwards results to the Aggregator node.
+   - [Operator](./operator/src/main.rs): A Rust executable that monitors requested tasks, retrieves tasks to be run within the Demo-App Docker image, executes them, and forwards results to the Aggregator node.
 4. **Aggregator**
    
    - [Aggregator](./aggregator/src/main.rs): A Rust executable that processes Operator results, verifies signatures, performs consensus validation, and broadcasts results to the `TaskRegistry`.
