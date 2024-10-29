@@ -85,6 +85,7 @@ sequenceDiagram
 
 ## Design Decisions and Future Improvements
 
+For the AVSthon, we wanted to build on lower level in order to understand the full eigenlayer picture, while we deployed an AVS using AltLayer (which by the way was a very simple and smooth process), for the submission we decided to manually integrate and deploy the contracts.
 To maintain simplicity in this proof of concept while focusing on core off-chain/on-chain interactions, we simplified several components that will be enhanced in future iterations:
 
 - **Operator Registration**: Currently simplified to basic Eigenlayer registration. Future versions will implement a `RegistryCoordinator` to verify Operator status before GizaAVS registration.
