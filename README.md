@@ -115,7 +115,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ## Setup and Execution
 
-A `Makefile` is provided for easy execution. Follow these steps in separate terminals:
+A `Makefile` is provided to ease the execution. Follow these steps in separate terminals:
 
 1. Build contracts: `make build-contracts`
 2. Start local blockchain: `make anvil`
