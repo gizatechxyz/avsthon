@@ -117,15 +117,22 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ## Setup and Execution
 
+You can run the AVS both locally using `anvil` or on Holesky testnet.
+
 A `Makefile` is provided to ease the execution. Follow these steps in separate terminals:
 
-1. Build contracts: `make build-contracts`
-2. Start local blockchain: `make anvil`
-3. Deploy contracts: `make deploy-contracts`
-4. Launch first Operator: `make run-operator-uji`
-5. Launch second Operator: `make run-operator-floki`
-6. Start Aggregator: `make run-aggregator`
-7. Create a test task: `make create-task`
+### Local Execution
 
-This setup creates multiple parallel processes: a local blockchain instance, two Operator nodes, and an Aggregator node. 
-Creating a task triggers the demo-app execution across Operators.
+1. Start local blockchain: `make anvil`
+2. Launch first Operator: `make run-operator-uji-anvil`
+3. Launch second Operator: `make run-operator-floki-anvil`
+4. Start Aggregator: `make run-aggregator-anvil`
+5. Create a test task: `make create-task-anvil`
+
+### Holesky Testnet
+
+1. Launch first Operator: `make run-operator-uji-holesky`
+2. Launch second Operator: `make run-operator-floki-holesky`
+3. Start Aggregator: `make run-aggregator-holesky`
+4. Create a test task: `make create-task-holesky`
+
