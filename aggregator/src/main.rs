@@ -1,6 +1,9 @@
+use std::env;
+
 use aggregator::Aggregator;
 use eyre::Result;
 use time::macros::format_description;
+use tracing::error;
 use tracing_subscriber::fmt;
 
 fn init_tracing() {
@@ -28,8 +31,20 @@ async fn main() -> Result<()> {
     // Initialize tracing
     init_tracing();
 
-    let mut aggregator = Aggregator::new().await?;
-    aggregator.run().await?;
+    let args: Vec<String> = env::args().collect();
+    match args.len() {
+        2 => {
+            // Correct number of arguments, continue with the private key
+            let chain = args[1].clone().into();
+            let mut aggregator = Aggregator::new(chain).await?;
+            aggregator.run().await?
+        }
+        _ => {
+            error!("Usage: {} <private_key> ", args[0]);
+            error!("Only the private key is expected as argument");
+            std::process::exit(1);
+        }
+    }
 
     // Keep the main thread running
     tokio::signal::ctrl_c().await?;

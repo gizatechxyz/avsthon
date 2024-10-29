@@ -16,7 +16,7 @@ impl AggregatorConfig {
         dotenv().ok();
 
         let ecdsa_signer: PrivateKeySigner =
-            "47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a"
+            "6e7912cf57b1cd9df1b05712e92a082c8c06511f62432abdaad503060822bc72"
                 .parse()
                 .expect("Failed to parse ECDSA private key");
 

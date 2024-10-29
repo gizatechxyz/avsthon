@@ -13,7 +13,7 @@ use alloy::{
 };
 use alloy_primitives::{Address, FixedBytes, U256};
 use contract_bindings::{
-    AVSDirectory::AVSDirectoryInstance, GizaAVS::GizaAVSInstance,
+    AVSDirectory::AVSDirectoryInstance, Chain, GizaAVS::GizaAVSInstance,
     TaskRegistry::TaskRegistryInstance, TaskStatus, AVS_DIRECTORY_ADDRESS, GIZA_AVS_ADDRESS,
     TASK_REGISTRY_ADDRESS,
 };
@@ -93,16 +93,14 @@ pub struct Aggregator {
 
 impl Aggregator {
     // Initialize a new Aggregator instance
-    pub async fn new() -> Result<Self, AggregatorError> {
+    pub async fn new(chain: Chain) -> Result<Self, AggregatorError> {
         let config = AggregatorConfig::from_env();
 
         let ecdsa_signer = config.ecdsa_signer;
         let wallet = EthereumWallet::from(ecdsa_signer.clone());
 
         // Create HttpProvider
-        let rpc_url = "http://localhost:8545"
-            .parse()
-            .expect("Failed to parse RPC URL");
+        let rpc_url = chain.http_url();
 
         let http_provider = Arc::new(
             ProviderBuilder::new()
@@ -111,15 +109,23 @@ impl Aggregator {
                 .on_http(rpc_url),
         );
 
-        // Create PubSubProvider
-        let ipc_path = "/tmp/anvil.ipc";
-        let ipc = IpcConnect::new(ipc_path.to_string());
-        let pubsub_provider: Arc<RootProvider<PubSubFrontend>> = Arc::new(
-            ProviderBuilder::new()
-                .on_ipc(ipc)
+        let pubsub_provider: Arc<RootProvider<PubSubFrontend>> = match chain {
+            Chain::Anvil => {
+                let ipc = IpcConnect::new("/tmp/anvil.ipc".to_string());
+                ProviderBuilder::new()
+                    .on_ipc(ipc)
+                    .await
+                    .map_err(|e| AggregatorError::ProviderInitError(e.to_string()))?
+            }
+            Chain::Holesky => ProviderBuilder::new()
+                .on_ws(alloy::providers::WsConnect {
+                    url: chain.ws_url().to_string(),
+                    auth: None,
+                })
                 .await
                 .map_err(|e| AggregatorError::ProviderInitError(e.to_string()))?,
-        );
+        }
+        .into();
 
         Ok(Self {
             operator_list: Arc::new(DashMap::new()),
@@ -392,9 +398,6 @@ impl Aggregator {
                 .watch()
                 .await
                 .map_err(|e| AggregatorError::TxError(e.to_string()))?;
-
-            let random_delay = rand::thread_rng().gen_range(0..=3000);
-            sleep(Duration::from_millis(random_delay)).await;
 
             info!("Task result sent tx hash: {:?}", tx);
         }
