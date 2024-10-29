@@ -2,6 +2,7 @@
 
 Giza is a decentralized protocol enabling AI-powered agents to operate within Web3 ecosystems. 
 It provides infrastructure for creating, deploying, and running autonomous agents that interact with blockchain protocols and execute complex strategies.
+
 Decentralized applications present significant challenges for users and developers. 
 They require constant attention, frequent interactions, and deep technical knowledge, creating barriers to entry, inefficiencies, and security risks.
 The multitude of protocols and chains demands continuous monitoring to manage positions and optimize returns—a task beyond most users' capabilities. 
