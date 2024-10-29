@@ -57,6 +57,13 @@ spawn-task-anvil: ## spawn a task (you need to run anvil first in a separate ter
 create-task-holesky: ## create a task (you need to run anvil first in a separate terminal and the contract deployed)
 	cast send $(TASK_REGISTRY_ADDRESS)  "createTask(bytes32)" $(TASK_ID) --private-key $(DEPLOYER_PK) --rpc-url $(HOLESKY_RPC_URL)
 
+spawn-task-holesky: ## spawn a task (you need to run anvil first in a separate terminal and the contract deployed)
+	@bash -c 'while true; do \
+		cast send $(TASK_REGISTRY_ADDRESS) "createTask(bytes32)" $(TASK_ID) --private-key $(DEPLOYER_PK) --rpc-url $(HOLESKY_RPC_URL); \
+		echo "Waiting 30 seconds before creating next task..."; \
+		sleep 30; \
+	done'
+
 __OPERATOR__: ##
 run-operator-uji-anvil: ## run the operator
 	cd operator && cargo run -- $(OPERATOR_UJI_PK) anvil
