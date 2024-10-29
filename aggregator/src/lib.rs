@@ -288,7 +288,7 @@ impl Aggregator {
             match log {
                 Ok(event) => {
                     tasks.insert(event.0.taskId, TaskStatus::PENDING);
-                    info!("New task detected: {:?}", event.0.taskId);
+                    info!("New task detected: \x1b[1;33m{:?}\x1b[0m", event.0.taskId);
                 }
                 Err(e) => error!("Error receiving event: {:?}", e),
             }
@@ -311,7 +311,7 @@ impl Aggregator {
                 .map_err(|e| AggregatorError::SignatureError(e.to_string()))?;
 
             info!(
-                "Aggregating response from operator: {:?} for task: {:?}",
+                "Aggregating response from operator: \x1b[1;34m{:?}\x1b[0m for task: \x1b[1;33m{:?}\x1b[0m",
                 operator_address, response.task_id
             );
 
@@ -357,10 +357,13 @@ impl Aggregator {
             // Check if all values in the array are equal
             let (task_status, consensus_result) =
                 if extracted_result.iter().all(|&x| x == extracted_result[0]) {
-                    info!("Consensus reached for task: {:?}", task_id);
+                    info!("Consensus reached for task: \x1b[1;33m{:?}\x1b[0m", task_id);
                     (TaskStatus::COMPLETED, extracted_result[0])
                 } else {
-                    info!("Consensus not reached for task: {:?}", task_id);
+                    info!(
+                        "Consensus not reached for task: \x1b[1;33m{:?}\x1b[0m",
+                        task_id
+                    );
                     (TaskStatus::FAILED, U256::ZERO)
                 };
 
@@ -387,7 +390,10 @@ impl Aggregator {
         let task_registry = TaskRegistryInstance::new(TASK_REGISTRY_ADDRESS, http_provider.clone());
 
         while let Some(task_result) = rx.recv().await {
-            info!("Sending task result for: {:?}", task_result.task_id);
+            info!(
+                "Sending task result for: \x1b[1;33m{:?}\x1b[0m",
+                task_result.task_id
+            );
             let tx_request = task_registry
                 .respondToTask(
                     task_result.task_id,
@@ -420,7 +426,7 @@ impl Aggregator {
                 .await
                 .map_err(|e| AggregatorError::TxError(e.to_string()))?;
             info!(
-                "Tx hash for task: {:?} is {:?}",
+                "Tx hash \x1b[1;32m{:?}\x1b[0m for task \x1b[1;33m{:?}\x1b[0m",
                 pending_tx.tx_hash(),
                 task_result.task_id
             );

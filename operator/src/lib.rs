@@ -360,7 +360,7 @@ impl Operator {
         let http_client = HttpClient::new();
 
         while let Some(task) = rx.recv().await {
-            info!("Processing task: {:?}", task);
+            info!("Processing task: \x1b[1;33m{:?}\x1b[0m", task);
 
             let client_app_id = task.taskRequest.appId;
 
@@ -393,7 +393,10 @@ impl Operator {
 
             match self.docker.run_image(&image_metadata).await {
                 Ok(result) => {
-                    info!("Processed task: {:?}. Result: {:?}", task, result);
+                    info!(
+                        "Processed task: \x1b[1;33m{:?}\x1b[0m. Result: {:?}",
+                        task, result
+                    );
                     let signed_result = self.ecdsa_signer.sign_message_sync(&result.as_bytes())?;
                     let response = OperatorResponse {
                         task_id: task.taskId,
