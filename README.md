@@ -19,9 +19,9 @@ They can be customized for various use cases, from optimizing DeFi strategies to
 
 The Giza Protocol aims to provide decentralized execution, validation, and result verification of complex off-chain applications in a trust-minimized manner. We are building Giza as an AVS to leverage Ethereum's security for:
 
-**Decentralized execution**: Ensuring a distributed execution environment for Agents.
-**Decentralized validation and verification**: Ensuring user operations from Agents' executions are validated and verified across the network.
-**Trustless operations**: Implementing mechanisms that guarantee tamper resistance, preventing single-entity manipulation.
+* **Decentralized execution**: Ensuring a distributed execution environment for Agents.
+* **Decentralized validation and verification**: Ensuring user operations from Agents' executions are validated and verified across the network.
+* **Trustless operations**: Implementing mechanisms that guarantee tamper resistance, preventing single-entity manipulation.
 
 # AVSthon Scope
 
