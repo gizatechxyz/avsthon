@@ -5,7 +5,7 @@ It provides infrastructure for creating, deploying, and running autonomous agent
 
 Decentralized applications present significant challenges for users and developers. 
 They require constant attention, frequent interactions, and deep technical knowledge, creating entry barriers, inefficiencies, and security risks.
-The multitude of protocols and chains demands continuous monitoring to manage positions and optimize returns—a task beyond most users' capabilities. 
+The multitude of protocols and chains demands continuous monitoring to manage positions and optimize returns; a task beyond most users' capabilities. 
 Moreover, the steep learning curve limits broader adoption, while managing cross-chain activities adds further complexity. 
 Traditional smart contract-based automation, constrained by blockchain throughput and gas costs, falls short of addressing these issues comprehensively.
 
