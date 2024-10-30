@@ -40,7 +40,7 @@ async fn main() -> Result<()> {
         }
         _ => {
             error!("Usage: {} <private_key> <chain>", args[0]);
-            error!("Only the private key and chain are expected as arguments");
+            error!("Both the private key and chain are expected as arguments");
             std::process::exit(1);
         }
     }
