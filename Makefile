@@ -54,7 +54,7 @@ spawn-task-anvil: ## spawn a task (you need to run anvil first in a separate ter
 		sleep 5; \
 	done'
 
-create-task-holesky: ## create a task (you need to run anvil first in a separate terminal and the contract deployed)
+create-task-holesky: ## create a task
 	cast send $(TASK_REGISTRY_ADDRESS)  "createTask(bytes32)" $(TASK_ID) --private-key $(DEPLOYER_PK) --rpc-url $(HOLESKY_RPC_URL)
 
 spawn-task-holesky: ## spawn a task (you need to run anvil first in a separate terminal and the contract deployed)
