@@ -139,15 +139,15 @@ A `Makefile` is provided to ease the execution. Follow these steps in separate t
 ### Local Execution
 
 1. Start local blockchain: `make anvil`
-2. Launch first Operator: `make run-operator-uji-anvil`
-3. Launch second Operator: `make run-operator-floki-anvil`
-4. Start Aggregator: `make run-aggregator-anvil`
-5. Create a test task: `make create-task-anvil`
+1. Launch first Operator: `make run-operator-uji-anvil`
+1. Launch second Operator: `make run-operator-floki-anvil`
+1. Start Aggregator: `make run-aggregator-anvil`
+1. Create a test task: `make create-task-anvil`
 
 ### Holesky Testnet
 
 1. Launch first Operator: `make run-operator-uji-holesky`
-2. Launch second Operator: `make run-operator-floki-holesky`
-3. Start Aggregator: `make run-aggregator-holesky`
-4. Create a test task: `make create-task-holesky`
+1. Launch second Operator: `make run-operator-floki-holesky`
+1. Start Aggregator: `make run-aggregator-holesky`
+1. Create a test task: `make create-task-holesky`
 
