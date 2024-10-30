@@ -6,21 +6,20 @@ use alloy::{
             BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller,
             WalletFiller,
         },
-        Identity, IpcConnect, ProviderBuilder, RootProvider,
+        Identity, IpcConnect, Provider, ProviderBuilder, RootProvider,
     },
     pubsub::PubSubFrontend,
     transports::http::{Client, Http},
 };
 use alloy_primitives::{Address, FixedBytes, U256};
 use contract_bindings::{
-    AVSDirectory::AVSDirectoryInstance, GizaAVS::GizaAVSInstance,
+    AVSDirectory::AVSDirectoryInstance, Chain, GizaAVS::GizaAVSInstance,
     TaskRegistry::TaskRegistryInstance, TaskStatus, AVS_DIRECTORY_ADDRESS, GIZA_AVS_ADDRESS,
     TASK_REGISTRY_ADDRESS,
 };
 use dashmap::DashMap;
 use eyre::Result;
 use futures::StreamExt;
-use rand::Rng;
 use server::{AppState, OperatorResponse};
 use std::sync::Arc;
 use std::time::Duration;
@@ -93,16 +92,14 @@ pub struct Aggregator {
 
 impl Aggregator {
     // Initialize a new Aggregator instance
-    pub async fn new() -> Result<Self, AggregatorError> {
+    pub async fn new(chain: Chain) -> Result<Self, AggregatorError> {
         let config = AggregatorConfig::from_env();
 
         let ecdsa_signer = config.ecdsa_signer;
         let wallet = EthereumWallet::from(ecdsa_signer.clone());
 
         // Create HttpProvider
-        let rpc_url = "http://localhost:8545"
-            .parse()
-            .expect("Failed to parse RPC URL");
+        let rpc_url = chain.http_url();
 
         let http_provider = Arc::new(
             ProviderBuilder::new()
@@ -111,15 +108,23 @@ impl Aggregator {
                 .on_http(rpc_url),
         );
 
-        // Create PubSubProvider
-        let ipc_path = "/tmp/anvil.ipc";
-        let ipc = IpcConnect::new(ipc_path.to_string());
-        let pubsub_provider: Arc<RootProvider<PubSubFrontend>> = Arc::new(
-            ProviderBuilder::new()
-                .on_ipc(ipc)
+        let pubsub_provider: Arc<RootProvider<PubSubFrontend>> = match chain {
+            Chain::Anvil => {
+                let ipc = IpcConnect::new("/tmp/anvil.ipc".to_string());
+                ProviderBuilder::new()
+                    .on_ipc(ipc)
+                    .await
+                    .map_err(|e| AggregatorError::ProviderInitError(e.to_string()))?
+            }
+            Chain::Holesky => ProviderBuilder::new()
+                .on_ws(alloy::providers::WsConnect {
+                    url: chain.ws_url().to_string(),
+                    auth: None,
+                })
                 .await
                 .map_err(|e| AggregatorError::ProviderInitError(e.to_string()))?,
-        );
+        }
+        .into();
 
         Ok(Self {
             operator_list: Arc::new(DashMap::new()),
@@ -281,7 +286,7 @@ impl Aggregator {
             match log {
                 Ok(event) => {
                     tasks.insert(event.0.taskId, TaskStatus::PENDING);
-                    info!("New task detected: {:?}", event.0.taskId);
+                    info!("New task detected: \x1b[1;33m{:?}\x1b[0m", event.0.taskId);
                 }
                 Err(e) => error!("Error receiving event: {:?}", e),
             }
@@ -304,7 +309,7 @@ impl Aggregator {
                 .map_err(|e| AggregatorError::SignatureError(e.to_string()))?;
 
             info!(
-                "Aggregating response from operator: {:?} for task: {:?}",
+                "Aggregating response from operator: \x1b[1;34m{:?}\x1b[0m for task: \x1b[1;33m{:?}\x1b[0m",
                 operator_address, response.task_id
             );
 
@@ -350,10 +355,13 @@ impl Aggregator {
             // Check if all values in the array are equal
             let (task_status, consensus_result) =
                 if extracted_result.iter().all(|&x| x == extracted_result[0]) {
-                    info!("Consensus reached for task: {:?}", task_id);
+                    info!("Consensus reached for task: \x1b[1;33m{:?}\x1b[0m", task_id);
                     (TaskStatus::COMPLETED, extracted_result[0])
                 } else {
-                    info!("Consensus not reached for task: {:?}", task_id);
+                    info!(
+                        "Consensus not reached for task: \x1b[1;33m{:?}\x1b[0m",
+                        task_id
+                    );
                     (TaskStatus::FAILED, U256::ZERO)
                 };
 
@@ -377,26 +385,49 @@ impl Aggregator {
         mut rx: mpsc::Receiver<TaskResult>,
         http_provider: HttpProviderWithSigner,
     ) -> Result<(), AggregatorError> {
-        let task_registry = TaskRegistryInstance::new(TASK_REGISTRY_ADDRESS, http_provider);
+        let task_registry = TaskRegistryInstance::new(TASK_REGISTRY_ADDRESS, http_provider.clone());
 
         while let Some(task_result) = rx.recv().await {
-            let tx = task_registry
+            info!(
+                "Sending task result for: \x1b[1;33m{:?}\x1b[0m",
+                task_result.task_id
+            );
+            let tx_request = task_registry
                 .respondToTask(
                     task_result.task_id,
                     task_result.status.into(),
                     task_result.result,
                 )
-                .send()
-                .await
-                .map_err(|e| AggregatorError::TxError(e.to_string()))?
-                .watch()
+                .into_transaction_request();
+
+            let mut attempts = 0;
+            const MAX_ATTEMPTS: u32 = 6;
+            const RETRY_DELAY: Duration = Duration::from_secs(5);
+
+            let filled_tx = loop {
+                match http_provider.fill(tx_request.clone()).await {
+                    Ok(tx) => break tx,
+                    Err(e) => {
+                        attempts += 1;
+                        if attempts >= MAX_ATTEMPTS {
+                            error!("Failed to fill tx after {} attempts: {:?}", MAX_ATTEMPTS, e);
+                            return Err(AggregatorError::TxError(e.to_string()));
+                        }
+                        sleep(RETRY_DELAY).await;
+                    }
+                }
+            };
+
+            let tx_to_submit = filled_tx.as_envelope().unwrap();
+            let pending_tx = http_provider
+                .send_tx_envelope(tx_to_submit.clone())
                 .await
                 .map_err(|e| AggregatorError::TxError(e.to_string()))?;
-
-            let random_delay = rand::thread_rng().gen_range(0..=3000);
-            sleep(Duration::from_millis(random_delay)).await;
-
-            info!("Task result sent tx hash: {:?}", tx);
+            info!(
+                "Tx hash \x1b[1;32m{:?}\x1b[0m for task \x1b[1;33m{:?}\x1b[0m",
+                pending_tx.tx_hash(),
+                task_result.task_id
+            );
         }
 
         Ok(())

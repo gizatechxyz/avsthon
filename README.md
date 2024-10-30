@@ -101,6 +101,8 @@ To maintain simplicity in this proof of concept while focusing on core off-chain
 The following tools are required:
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
 - [Rust toolchain](https://www.rust-lang.org/tools/install)
+- [Colima](https://github.com/abiosoft/colima) -- On MacOS
+- [Docker](https://www.docker.com/products/docker-desktop/) If not already installed
 
 ### Installing Foundry
 
@@ -115,17 +117,36 @@ foundryup
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
+### Installing Colima (If on MacOS)
+
+```bash
+brew install colima
+colima start
+```
+
+### Installing Docker (If not already installed and on MacOS)
+
+```bash
+brew install docker
+```
+
 ## Setup and Execution
+
+You can run the AVS both locally using `anvil` or on Holesky testnet.
 
 A `Makefile` is provided to ease the execution. Follow these steps in separate terminals:
 
-1. Build contracts: `make build-contracts`
-2. Start local blockchain: `make anvil`
-3. Deploy contracts: `make deploy-contracts`
-4. Launch first Operator: `make run-operator-uji`
-5. Launch second Operator: `make run-operator-floki`
-6. Start Aggregator: `make run-aggregator`
-7. Create a test task: `make create-task`
+### Local Execution
 
-This setup creates multiple parallel processes: a local blockchain instance, two Operator nodes, and an Aggregator node. 
-Creating a task triggers the demo-app execution across Operators.
+1. Start local blockchain: `make anvil`
+1. Launch first Operator: `make run-operator-uji-anvil`
+1. Launch second Operator: `make run-operator-floki-anvil`
+1. Start Aggregator: `make run-aggregator-anvil`
+1. Create a test task: `make create-task-anvil`
+
+### Holesky Testnet
+
+1. Launch first Operator: `make run-operator-uji-holesky`
+1. Launch second Operator: `make run-operator-floki-holesky`
+1. Start Aggregator: `make run-aggregator-holesky`
+1. Create a test task: `make create-task-holesky`

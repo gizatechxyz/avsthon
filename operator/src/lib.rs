@@ -18,6 +18,7 @@ use alloy_primitives::{Address, FixedBytes, Signature, U256};
 use bollard::{Docker, API_DEFAULT_VERSION};
 use contract_bindings::{
     AVSDirectory::AVSDirectoryInstance,
+    Chain,
     ClientAppRegistry::ClientAppRegistryInstance,
     GizaAVS::GizaAVSInstance,
     ISignatureUtils::SignatureWithSaltAndExpiry,
@@ -28,7 +29,6 @@ use docker_client::DockerClient;
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
 use operator_config::OperatorConfig;
-use rand::Rng;
 use reqwest::Client as HttpClient;
 use serde::Serialize;
 use std::time::Duration;
@@ -77,7 +77,7 @@ pub struct Operator {
 }
 
 impl Operator {
-    pub async fn new(private_key: &str) -> Result<Self> {
+    pub async fn new(private_key: &str, chain: Chain) -> Result<Self> {
         // Load operator configuration
         let config = OperatorConfig::from_env(private_key);
 
@@ -86,19 +86,26 @@ impl Operator {
         let wallet = EthereumWallet::from(ecdsa_signer.clone());
 
         //Create PubSubProvider
-        let ipc_path = "/tmp/anvil.ipc";
-        let ipc = IpcConnect::new(ipc_path.to_string());
-        let pubsub_provider: Arc<RootProvider<PubSubFrontend>> = Arc::new(
-            ProviderBuilder::new()
-                .on_ipc(ipc)
+        let pubsub_provider: Arc<RootProvider<PubSubFrontend>> = match chain {
+            Chain::Anvil => {
+                let ipc = IpcConnect::new("/tmp/anvil.ipc".to_string());
+                ProviderBuilder::new()
+                    .on_ipc(ipc)
+                    .await
+                    .wrap_err("Failed to create Anvil IPC provider")?
+            }
+            Chain::Holesky => ProviderBuilder::new()
+                .on_ws(alloy::providers::WsConnect {
+                    url: chain.ws_url().to_string(),
+                    auth: None,
+                })
                 .await
-                .wrap_err("Failed to create provider")?,
-        );
+                .wrap_err("Failed to create Holesky WebSocket provider")?,
+        }
+        .into();
 
         //Create HttpProvider
-        let rpc_url = "http://localhost:8545"
-            .parse()
-            .expect("Failed to parse URL");
+        let rpc_url = chain.http_url();
 
         let http_provider = Arc::new(
             ProviderBuilder::new()
@@ -352,7 +359,7 @@ impl Operator {
         let http_client = HttpClient::new();
 
         while let Some(task) = rx.recv().await {
-            info!("Processing task: {:?}", task);
+            info!("Processing task: \x1b[1;33m{:?}\x1b[0m", task);
 
             let client_app_id = task.taskRequest.appId;
 
@@ -385,7 +392,10 @@ impl Operator {
 
             match self.docker.run_image(&image_metadata).await {
                 Ok(result) => {
-                    info!("Processed task: {:?}. Result: {:?}", task, result);
+                    info!(
+                        "Processed task: \x1b[1;33m{:?}\x1b[0m. Result: {:?}",
+                        task, result
+                    );
                     let signed_result = self.ecdsa_signer.sign_message_sync(&result.as_bytes())?;
                     let response = OperatorResponse {
                         task_id: task.taskId,
@@ -398,9 +408,6 @@ impl Operator {
                     let mut retry_count = 0;
                     const MAX_RETRIES: u32 = 3;
 
-                    // Introduce random latency between 0 and 3 seconds
-                    let random_delay = rand::thread_rng().gen_range(0..=3000);
-                    sleep(Duration::from_millis(random_delay)).await;
                     loop {
                         match http_client.post(&submit_url).json(&response).send().await {
                             Ok(res) => {

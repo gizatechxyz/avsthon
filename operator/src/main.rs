@@ -31,21 +31,16 @@ async fn main() -> Result<()> {
 
     let args: Vec<String> = env::args().collect();
     match args.len() {
-        1 => {
-            error!("Error: No private key provided");
-            error!("Usage: {} <private_key>", args[0]);
-            std::process::exit(1);
-        }
-        2 => {
+        3 => {
             // Correct number of arguments, continue with the private key
             let private_key = args[1].clone();
-            let operator = Operator::new(&private_key).await?;
+            let chain = args[2].clone().into();
+            let operator = Operator::new(&private_key, chain).await?;
             operator.run().await
         }
         _ => {
-            error!("Error: Too many arguments provided");
-            error!("Usage: {} <private_key>", args[0]);
-            error!("Only the private key is expected as an argument");
+            error!("Usage: {} <private_key> <chain>", args[0]);
+            error!("Both the private key and chain are expected as arguments");
             std::process::exit(1);
         }
     }
