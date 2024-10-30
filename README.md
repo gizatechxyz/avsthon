@@ -26,6 +26,8 @@ The Giza Protocol aims to provide decentralized execution, validation, and resul
 
 # AVSthon Scope
 
+The goal of our AVS is to allow for running arbitrary applications by providing a decentralized trustless execution environment.
+To achieve this, we allow for registering arbitrary applications (client applications) to be run by Operators and validated by the Aggregator before the result being broadcast on-chain.
 For the AVSthon, we have simplified the main components of the Giza protocol to deliver a functional proof of concept combining on-chain and off-chain components. The scope includes:
 
 1. **Giza AVS** 
