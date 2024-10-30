@@ -101,7 +101,7 @@ To maintain simplicity in this proof of concept while focusing on core off-chain
 The following tools are required:
 - [Foundry](https://book.getfoundry.sh/getting-started/installation)
 - [Rust toolchain](https://www.rust-lang.org/tools/install)
-- [Colima](https://github.com/abiosoft/colima)
+- [Colima](https://github.com/abiosoft/colima) -- On MacOS
 - [Docker](https://www.docker.com/products/docker-desktop/) If not already installed
 
 ### Installing Foundry
@@ -117,14 +117,14 @@ foundryup
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-### Installing Colima
+### Installing Colima (If on MacOS)
 
 ```bash
 brew install colima
 colima start
 ```
 
-### Installing Docker
+### Installing Docker (If not already installed and on MacOS)
 
 ```bash
 brew install docker
