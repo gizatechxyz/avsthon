@@ -6,10 +6,9 @@ use alloy::{
             BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller,
             WalletFiller,
         },
-        Identity, IpcConnect, Provider, ProviderBuilder, RootProvider, WalletProvider,
+        Identity, IpcConnect, Provider, ProviderBuilder, RootProvider,
     },
     pubsub::PubSubFrontend,
-    rpc::types::TransactionRequest,
     transports::http::{Client, Http},
 };
 use alloy_primitives::{Address, FixedBytes, U256};
@@ -21,7 +20,6 @@ use contract_bindings::{
 use dashmap::DashMap;
 use eyre::Result;
 use futures::StreamExt;
-use rand::Rng;
 use server::{AppState, OperatorResponse};
 use std::sync::Arc;
 use std::time::Duration;

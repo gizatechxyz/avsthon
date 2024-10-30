@@ -29,7 +29,6 @@ use docker_client::DockerClient;
 use eyre::{Result, WrapErr};
 use futures::StreamExt;
 use operator_config::OperatorConfig;
-use rand::Rng;
 use reqwest::Client as HttpClient;
 use serde::Serialize;
 use std::time::Duration;
