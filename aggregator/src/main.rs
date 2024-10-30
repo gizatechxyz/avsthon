@@ -40,8 +40,8 @@ async fn main() -> Result<()> {
             aggregator.run().await?
         }
         _ => {
-            error!("Usage: {} <private_key> ", args[0]);
-            error!("Only the private key is expected as argument");
+            error!("Usage: {} <chain> ", args[0]);
+            error!("Only the chain is expected as argument");
             std::process::exit(1);
         }
     }
