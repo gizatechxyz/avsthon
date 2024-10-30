@@ -150,4 +150,3 @@ A `Makefile` is provided to ease the execution. Follow these steps in separate t
 1. Launch second Operator: `make run-operator-floki-holesky`
 1. Start Aggregator: `make run-aggregator-holesky`
 1. Create a test task: `make create-task-holesky`
-
